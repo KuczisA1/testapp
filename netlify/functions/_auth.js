@@ -72,8 +72,24 @@ async function requireAuth(event, context, options = {}) {
   // Pending handling
   if (allowPending) return { ok: true, user };
 
+  // Role check first
   if (!hasAnyRole(user, required)) {
     return { ok: false, statusCode: 403, body: { error: 'forbidden' } };
+  }
+
+  // Additional time-window enforcement for time-limited roles
+  // If endpoint requires 'active' and user has time-limited grant (hour|month|year)
+  // then ensure paid_role_until is still in the future.
+  const needsActive = required.includes('active');
+  if (needsActive) {
+    const md = (user && user.user_metadata) || {};
+    const tag = md.paid_role_tag;
+    const until = Number(md.paid_role_until || 0);
+    if ((tag === 'hour' || tag === 'month' || tag === 'year') && until > 0) {
+      if (Date.now() >= until) {
+        return { ok: false, statusCode: 403, body: { error: 'expired' } };
+      }
+    }
   }
   return { ok: true, user };
 }
@@ -95,4 +111,3 @@ function json(statusCode, body, extraHeaders) {
 }
 
 module.exports = { requireAuth, corsHeaders, json };
-

@@ -72,31 +72,35 @@ exports.handler = async (event) => {
     // Admin zawsze ma dostęp aktywny
     if (grantTag === 'admin') {
       addRole('active');
+      removeRole('pending');
     } else if (grantTag === 'active') {
       addRole('active');
+      removeRole('pending');
     } else if (grantTag === 'hour' || grantTag === 'month' || grantTag === 'year') {
       const stillValid = paidRoleUntil > nowMs; // przydział czasowy nadal ważny
-      if (stillValid) addRole('active'); else removeRole('active');
+      if (stillValid) { addRole('active'); removeRole('pending'); }
+      else { removeRole('active'); addRole('pending'); }
     } else {
-      // nic
+      // brak przydziału → pending
       removeRole('active');
+      addRole('pending');
     }
 
     // Jeżeli nie było żadnych ról, ustaw przynajmniej pending
     if (!nextRoles.length) nextRoles = ['pending'];
 
+    // Zachowaj istniejące user_metadata (np. name, full_name, username)
+    const keepMeta = Object.assign({}, user.user_metadata || {});
+    keepMeta.current_session = newSession;
+    keepMeta.session_started_at = nowMs;
+    keepMeta.session_max_seconds = SESSION_MAX_SECONDS;
+    keepMeta.paid_role_tag = grantTag || null;
+    keepMeta.paid_role_since = paidRoleSince || 0;
+    keepMeta.paid_role_until = paidRoleUntil || 0;
+
     const resp = {
-      user_metadata: {
-        current_session: newSession,
-        session_started_at: nowMs,
-        session_max_seconds: SESSION_MAX_SECONDS,
-        paid_role_tag: grantTag || null,
-        paid_role_since: paidRoleSince || 0,
-        paid_role_until: paidRoleUntil || 0
-      },
-      app_metadata: {
-        roles: nextRoles
-      }
+      user_metadata: keepMeta,
+      app_metadata: { roles: nextRoles }
     };
 
     return {

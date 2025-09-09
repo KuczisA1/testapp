@@ -175,7 +175,14 @@ const API = {
     });
     setAborter(null);
 
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    if(!res.ok){
+      let msg = `HTTP ${res.status}`;
+      try{
+        const err = await res.json();
+        if (err && (err.error || err.details)) msg += ` – ${err.error||''} ${err.details||''}`;
+      }catch{}
+      throw new Error(msg);
+    }
     const data=await res.json();
     return data?.text || '';
   }

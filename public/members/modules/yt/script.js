@@ -15,7 +15,9 @@ window.addEventListener("keydown", e => {
 const state = {
   domReady:false, apiReady:false, confReady:false,
   player:null, ticker:null, dragging:false, loadedOnce:false,
-  videoId:null, key:null, elements:{}, hideTimer:null
+  videoId:null, key:null, elements:{}, hideTimer:null,
+  host: 'https://www.youtube-nocookie.com', // prefer privacy-enhanced
+  triedFallback: false
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -76,7 +78,7 @@ function maybeInit(){
   if (!state.domReady || !state.apiReady || !state.confReady || state.player) return;
   state.player = new YT.Player("player", {
     width:"100%", height:"100%", videoId:"",
-    host:"https://www.youtube-nocookie.com", playerVars: PLAYER_VARS,
+    host: state.host, playerVars: PLAYER_VARS,
     events:{ onReady, onStateChange, onError }
   });
 }
@@ -87,6 +89,14 @@ function onReady(){
     state.player.setVolume(100);
     updateMuteIcon();
     setMsg("");
+    // Ensure iframe has permissive allow attributes for playback
+    try {
+      const iframe = state.player.getIframe();
+      if (iframe && iframe.setAttribute) {
+        iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
+        iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+      }
+    } catch {}
     showControls(); // pokaż na start
   }catch{}
 }
@@ -117,6 +127,11 @@ function onError(e){
   const extra = state.videoId ? ` (ID: ${maskId(state.videoId)})` : "";
   setMsg(map[code] ? `${map[code]}${extra}` : `Nieznany błąd [${code}]${extra}`);
   console.warn("[YT-ERROR]", code);
+  // Fallback: try regular youtube host if nocookie has issues (adblock or embed policies)
+  if (!state.triedFallback && state.host !== 'https://www.youtube.com') {
+    state.triedFallback = true;
+    tryFallbackHost('https://www.youtube.com');
+  }
 }
 
 /* --- Controls & overlay logic --- */
@@ -258,10 +273,37 @@ function startOrToggle(){
       state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0 });
       state.loadedOnce = true;
       scheduleAutoHide();
-    } catch {}
+    } catch (err) {
+      // On first attempt failure, try fallback host
+      if (!state.triedFallback && state.host !== 'https://www.youtube.com') {
+        state.triedFallback = true;
+        tryFallbackHost('https://www.youtube.com');
+      }
+    }
     return;
   }
   togglePlay();
+}
+
+function tryFallbackHost(host){
+  try {
+    // Destroy current player and recreate with different host
+    if (state.player && state.player.destroy) {
+      try { state.player.destroy(); } catch {}
+    }
+    state.player = null;
+    state.host = host;
+    setMsg('Przełączam tryb odtwarzacza...');
+    maybeInit();
+    // attempt to load ID immediately after init; slight delay to ensure iframe is ready
+    setTimeout(() => {
+      try {
+        state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0 });
+        state.loadedOnce = true;
+        setMsg('');
+      } catch {}
+    }, 200);
+  } catch {}
 }
 
 /* --- Auto-hide helpers --- */

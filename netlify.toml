@@ -23,6 +23,19 @@
   status = 200
   force  = true
 
+# Canonicalize /login (no trailing slash) to /login/
+[[redirects]]
+  from = "/login"
+  to   = "/login/"
+  status = 301
+  force  = true
+
+[[redirects]]
+  from = "/login.html"
+  to   = "/login/"
+  status = 301
+  force  = true
+
 # --- MEMBERS: tylko active/admin ---
 [[redirects]]
   from = "/members/*"

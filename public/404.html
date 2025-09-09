@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nie znaleziono</title>
+  <link rel="stylesheet" href="/assets/dashboard/style.css" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .card { max-width: 640px; padding: 24px; border-radius: 14px; background: rgba(255,255,255,.9); border: 1px solid rgba(0,0,0,.08); text-align:center; }
+    .actions { margin-top: 16px; display:flex; gap: 10px; justify-content:center; flex-wrap: wrap; }
+    .btn { outline:none; color:#fff; font-weight:600; border:none; border-radius:12px; padding:10px 16px; cursor:pointer; background-image:linear-gradient(135deg,#ff9a9e 10%,#F6416C 100%); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Nie znaleziono strony</h1>
+    <p>Wygląda na to, że adres jest nieprawidłowy lub zasób jest niedostępny.</p>
+    <p>Za chwilę przeniesiemy Cię na stronę z informacją o braku dostępu.</p>
+    <div class="actions">
+      <a class="btn" href="/">Strona główna</a>
+      <a class="btn" href="/unauthorized.html">Brak dostępu</a>
+      <a class="btn" href="/login/">Zaloguj</a>
+    </div>
+  </div>
+  <script>
+    setTimeout(() => { location.replace('/unauthorized.html'); }, 1200);
+  </script>
+</body>
+</html>
+

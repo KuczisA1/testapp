@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Logowanie – Aplikacja</title>
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="/login/style.css" />
   <!-- Widget Identity (dla sesji i eventów) -->
   <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 </head>
@@ -138,7 +138,13 @@
 
         try {
           setBusy(regBtn, true);
-          await netlifyIdentity.gotrue.signup(email, password, { full_name: name, name });
+          const uname = name.replace(/\s+/g, "").slice(0, 40);
+          await netlifyIdentity.gotrue.signup(email, password, {
+            full_name: name,
+            name,
+            username: uname,
+            preferred_username: uname
+          });
           flash("Konto utworzone. Sprawdź email, aby potwierdzić konto.", "success");
 
           // Jeśli nie używasz weryfikacji email, można zalogować od razu:

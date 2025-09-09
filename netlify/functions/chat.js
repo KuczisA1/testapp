@@ -12,21 +12,21 @@ exports.handler = async (event, context) => {
     };
   }
   if (event.httpMethod !== 'POST') {
-    return json({ error: 'Use POST' }, 405);
+    return json(405, { error: 'Use POST' });
   }
 
   // Auth: require active/admin
   const gate = await requireAuth(event, context, { anyOf: ['active'] });
-  if (!gate.ok) return json(gate.body, gate.statusCode);
+  if (!gate.ok) return json(gate.statusCode, gate.body);
 
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return json({ error: 'Server misconfigured: missing GEMINI_API_KEY' }, 500);
+  if (!apiKey) return json(500, { error: 'Server misconfigured: missing GEMINI_API_KEY' });
 
   let body;
   try {
     body = JSON.parse(event.body || '{}');
   } catch {
-    return json({ error: 'Invalid JSON' }, 400);
+    return json(400, { error: 'Invalid JSON' });
   }
 
   const {
@@ -37,7 +37,7 @@ exports.handler = async (event, context) => {
   } = body;
 
   if (!Array.isArray(messages) || messages.length === 0) {
-    return json({ error: 'messages array required' }, 400);
+    return json(400, { error: 'messages array required' });
   }
 
   const model = String(options.model || MODEL_DEFAULT);
@@ -82,7 +82,7 @@ exports.handler = async (event, context) => {
 
     if (!resp.ok) {
       const text = await safeText(resp);
-      return json({ error: `Upstream ${resp.status}`, details: text.slice(0, 800) }, 502);
+      return json(502, { error: `Upstream ${resp.status}`, details: text.slice(0, 800) });
     }
 
     const data = await resp.json();
@@ -90,13 +90,13 @@ exports.handler = async (event, context) => {
       .map(p => p.text || '')
       .join('');
 
-    return json({ text });
+    return json(200, { text });
   } catch (err) {
-    return json({ error: 'Request failed', details: String(err.message || err) }, 500);
+    return json(500, { error: 'Request failed', details: String(err.message || err) });
   }
 };
 
-function json(obj, status = 200) { return jsonResp(obj, status); }
+function json(status, obj) { return jsonResp(status, obj); }
 async function safeText(r) {
   try { return await r.text(); } catch { return ''; }
 }

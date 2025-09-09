@@ -25,6 +25,8 @@
   let painting = false;
   let guardPending = false;
   let guardQueued = false;
+  let identityReady = false;
+  let identityInitTs = 0;
 
   // ===== COOKIE nf_jwt =====
   function setJwtCookie(token) {
@@ -269,12 +271,7 @@
           ? `Pozostały czas sesji: ${formatHMS(left)}`
           : 'Sesja wygasła';
       }
-      if (left <= 0) {
-        // Wygasła sesja — wyloguj i przejdź na /login/
-        clearJwtCookie();
-        try { window.netlifyIdentity.logout(); } catch {}
-        safeGo(`${norm(PATHS.loginBase)}/`);
-      }
+      if (left <= 0) { handleSessionExpiredGlobal(); }
     }
 
     tick();
@@ -282,6 +279,46 @@
     return (stopSessionTimer = () => { active = false; clearInterval(id); });
   }
   // ======== /SESJA 5h ========
+
+  // ======== Globalny poller wygaśnięcia sesji (bez UI) ========
+  let stopExpiryPoller = null;
+
+  function handleSessionExpiredGlobal(){
+    // Delikatnie: wyloguj i przenieś na ekran startowy, bez pętli
+    clearJwtCookie();
+    try { window.netlifyIdentity.logout(); } catch {}
+    safeGo(PATHS.home[0]);
+  }
+
+  function startExpiryPoller(){
+    if (stopExpiryPoller) { stopExpiryPoller(); stopExpiryPoller = null; }
+    if (!hasIdentity()) return () => {};
+    const ni = window.netlifyIdentity;
+    let active = true;
+
+    async function check(){
+      if (!active) return;
+      const u = ni.currentUser();
+      if (!u) return;
+      const md = u.user_metadata || {};
+      const startedAt = Number(md.session_started_at || 0);
+      const maxSeconds = Number(md.session_max_seconds || 0);
+      if (!startedAt || !maxSeconds) return;
+      const end = startedAt + (maxSeconds * 1000);
+      if (Date.now() >= end) {
+        active = false;
+        handleSessionExpiredGlobal();
+      }
+    }
+
+    // Start i cykl co 30s + przy powrocie okna
+    check();
+    const id = setInterval(check, 30000);
+    const onVis = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVis);
+    return (stopExpiryPoller = () => { active = false; clearInterval(id); document.removeEventListener('visibilitychange', onVis); });
+  }
+  // ======== /Globalny poller ========
 
   // ===== Guard właściwy =====
   async function guardAndPaintCore() {
@@ -304,9 +341,10 @@
       return; // gdy niezalogowany → zostań na /login/
     }
 
-    // DASHBOARD: jeśli niezalogowany → /login/
+    // DASHBOARD: jeśli niezalogowany → /login/ (ale dopiero PO init Identity)
     if (onDashboard()) {
       if (!user) {
+        if (!identityReady) return; // poczekaj na init, unikaj fałszywych redirectów przy odświeżeniu
         safeGo(`${norm(PATHS.loginBase)}/`);
         return;
       }
@@ -357,6 +395,8 @@
 
     // ===== Identity lifecycle =====
     window.netlifyIdentity.on('init', async (user) => {
+      identityReady = true;
+      identityInitTs = Date.now();
       updateAuthLinks(user);
       if (user) {
         const ok = await ensureFreshJwtCookieOrLogout();
@@ -364,13 +404,15 @@
         await seedSessionVersion();
         if (stopSessionWatcher) stopSessionWatcher();
         stopSessionWatcher = startSessionWatcher();
-        // licznik sesji 5h
+        // licznik sesji 5h + globalny poller
         startFiveHourTimerIfPossible();
+        startExpiryPoller();
       } else {
         clearJwtCookie();
         clearLocalSessionVer();
         if (stopSessionWatcher) { stopSessionWatcher(); stopSessionWatcher = null; }
         if (stopSessionTimer) { stopSessionTimer(); stopSessionTimer = null; }
+        if (stopExpiryPoller) { stopExpiryPoller(); stopExpiryPoller = null; }
       }
       await runGuard();
     });
@@ -382,8 +424,9 @@
       await seedSessionVersion();
       if (stopSessionWatcher) stopSessionWatcher();
       stopSessionWatcher = startSessionWatcher();
-      // licznik sesji 5h
+      // licznik sesji 5h + globalny poller
       startFiveHourTimerIfPossible();
+      startExpiryPoller();
       safeGo(PATHS.dashboard);
     });
 
@@ -393,6 +436,7 @@
       clearLocalSessionVer();
       if (stopSessionWatcher) { stopSessionWatcher(); stopSessionWatcher = null; }
       if (stopSessionTimer) { stopSessionTimer(); stopSessionTimer = null; }
+      if (stopExpiryPoller) { stopExpiryPoller(); stopExpiryPoller = null; }
       safeGo(PATHS.home[0]); // '/'
     });
 
