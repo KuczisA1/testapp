@@ -210,8 +210,19 @@
         // --- „Wejdź do kursu”
         const membersBtn = $("members-link");
         if (membersBtn) {
-          membersBtn.addEventListener("click", function () {
+          membersBtn.addEventListener("click", async function () {
             const url = membersBtn.dataset.href || "/members/";
+            // Upewnij się, że cookie nf_jwt jest świeże przed wejściem do strefy chronionej
+            try {
+              if (hasIdentity()) {
+                const u = window.netlifyIdentity.currentUser();
+                if (u) {
+                  const token = await u.jwt(true);
+                  const secure = (location.protocol === 'https:') ? ' Secure;' : '';
+                  document.cookie = `nf_jwt=${token}; Path=/;${secure} SameSite=Lax; Max-Age=3600`;
+                }
+              }
+            } catch {}
             window.location.href = url;
           });
         }
@@ -386,7 +397,7 @@
           try { window.netlifyIdentity.init(); } catch (e) {}
           window.netlifyIdentity.on("init",  () => paint());
           window.netlifyIdentity.on("login", () => paint());
-          window.netlifyIdentity.on("logout", () => location.replace("/"));
+          // Logout na dashboard obsługuje globalny skrypt auth.js
         }
 
         // Pierwsze malowanie (np. po back/forward)

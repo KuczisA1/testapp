@@ -75,9 +75,8 @@
       return true;
     } catch {}
 
-    // 3. Nie udało się — wyloguj i zostań na /login/
-    clearJwtCookie();
-    try { await ni.logout(); } catch {}
+    // 3. Nie udało się — bądź łagodny: nie wylogowuj, nie czyść cookie.
+    // Zostaw stan do kolejnej próby. Zwróć false, aby logika wyżej nie wykonywała działań zależnych od świeżego JWT.
     return false;
   }
 
