@@ -27,6 +27,8 @@
   let guardQueued = false;
   let identityReady = false;
   let identityInitTs = 0;
+  let lastKnownUser = null;
+  let lastUserTs = 0;
 
   // ===== COOKIE nf_jwt =====
   function setJwtCookie(token) {
@@ -85,6 +87,16 @@
     return window.netlifyIdentity.currentUser() || user;
   }
 
+  function rememberUser(u){ if (u){ lastKnownUser = u; lastUserTs = Date.now(); } }
+  function clearRememberedUser(){ lastKnownUser = null; lastUserTs = 0; }
+  function getUserRelaxed(){
+    const u = window.netlifyIdentity.currentUser();
+    if (u) return u;
+    // podczas krótkich okien po odświeżeniu korzystamy z ostatnio znanego usera
+    if (identityReady && lastKnownUser && (Date.now() - lastUserTs) < 30000) return lastKnownUser;
+    return null;
+  }
+
   function updateNavForStatus(status) {
     const membersLink = $('members-link');
     if (membersLink) membersLink.style.display = (status === 'active') ? '' : 'none';
@@ -116,11 +128,12 @@
     painting = true;
     try {
       if (!hasIdentity()) return;
-      let user = window.netlifyIdentity.currentUser();
+      let user = getUserRelaxed();
       updateAuthLinks(user);
       if (!user) return;
 
       user = await refreshUser(user);
+      rememberUser(user);
       try { setJwtCookie(await user.jwt()); } catch {}
       updateAuthLinks(user);
 
@@ -322,8 +335,7 @@
   // ===== Guard właściwy =====
   async function guardAndPaintCore() {
     if (!hasIdentity()) return;
-
-    const user = window.netlifyIdentity.currentUser();
+    const user = getUserRelaxed();
 
     // HOME: jeśli zalogowany → dashboard
     if (onHome() && user) {
@@ -396,6 +408,7 @@
     window.netlifyIdentity.on('init', async (user) => {
       identityReady = true;
       identityInitTs = Date.now();
+      rememberUser(user);
       updateAuthLinks(user);
       if (user) {
         const ok = await ensureFreshJwtCookieOrLogout();
@@ -412,12 +425,14 @@
         if (stopSessionWatcher) { stopSessionWatcher(); stopSessionWatcher = null; }
         if (stopSessionTimer) { stopSessionTimer(); stopSessionTimer = null; }
         if (stopExpiryPoller) { stopExpiryPoller(); stopExpiryPoller = null; }
+        clearRememberedUser();
       }
       await runGuard();
     });
 
     window.netlifyIdentity.on('login', async (user) => {
       updateAuthLinks(user);
+      rememberUser(user);
       const ok = await ensureFreshJwtCookieOrLogout();
       if (!ok) return;
       await seedSessionVersion();
@@ -433,6 +448,7 @@
       updateAuthLinks(null);
       clearJwtCookie();
       clearLocalSessionVer();
+      clearRememberedUser();
       if (stopSessionWatcher) { stopSessionWatcher(); stopSessionWatcher = null; }
       if (stopSessionTimer) { stopSessionTimer(); stopSessionTimer = null; }
       if (stopExpiryPoller) { stopExpiryPoller(); stopExpiryPoller = null; }

@@ -17,7 +17,8 @@ const state = {
   player:null, ticker:null, dragging:false, loadedOnce:false,
   videoId:null, key:null, elements:{}, hideTimer:null,
   host: 'https://www.youtube-nocookie.com', // prefer privacy-enhanced
-  triedFallback: false
+  triedFallback: false,
+  stallTimer: null
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -87,6 +88,7 @@ function maybeInit(){
 function onReady(){
   try{
     state.player.setVolume(100);
+    try { state.player.mute(); } catch {}
     updateMuteIcon();
     setMsg("");
     // Ensure iframe has permissive allow attributes for playback
@@ -96,6 +98,10 @@ function onReady(){
         iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
         iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
       }
+    } catch {}
+    // Pre-cue to prime the player and reduce first-start latency
+    try {
+      if (state.videoId) state.player.cueVideoById({ videoId: state.videoId, startSeconds: 0, suggestedQuality: 'large' });
     } catch {}
     showControls(); // pokaż na start
   }catch{}
@@ -270,7 +276,20 @@ function startOrToggle(){
   if (!state.loadedOnce) {
     if (!state.videoId) { setMsg("Brak ID – nie pobrało się z ENV."); return; }
     try {
-      state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0 });
+      state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0, suggestedQuality: 'large' });
+      // attempt to autoplay muted to bypass gesture requirement and pre-roll stalls
+      try { state.player.mute(); state.player.playVideo(); } catch {}
+      // stall watchdog: if not PLAYING within 4s, try host fallback
+      if (state.stallTimer) { clearTimeout(state.stallTimer); state.stallTimer = null; }
+      state.stallTimer = setTimeout(() => {
+        try {
+          const st = state.player.getPlayerState();
+          if (st !== YT.PlayerState.PLAYING && !state.triedFallback && state.host !== 'https://www.youtube.com') {
+            state.triedFallback = true;
+            tryFallbackHost('https://www.youtube.com');
+          }
+        } catch {}
+      }, 4000);
       state.loadedOnce = true;
       scheduleAutoHide();
     } catch (err) {
@@ -298,7 +317,8 @@ function tryFallbackHost(host){
     // attempt to load ID immediately after init; slight delay to ensure iframe is ready
     setTimeout(() => {
       try {
-        state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0 });
+        state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0, suggestedQuality: 'large' });
+        try { state.player.mute(); state.player.playVideo(); } catch {}
         state.loadedOnce = true;
         setMsg('');
       } catch {}
