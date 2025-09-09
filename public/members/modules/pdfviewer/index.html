@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Podgląd PDF — Chrome‑like + Przybornik</title>
+  <script>
+    // Early mobile detection to avoid initial UI flicker
+    (function(){
+      try{
+        var ua = navigator.userAgent||navigator.vendor||window.opera||'';
+        var phone = /Android|iPhone|iPod|Windows Phone/i.test(ua);
+        var coarse = window.matchMedia && window.matchMedia('(any-pointer: coarse)').matches;
+        var narrow = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+        if(phone || (coarse && narrow)) document.documentElement.classList.add('is-mobile');
+      }catch(e){}
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css" />
+  <!-- PDF.js 2.6.347 (klasyczne skrypty) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    // Konfiguracja workera PDF.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
+  </script>
+</head>
+<body>
+  <div class="app">
+    <div class="toolbar">
+      <!--<label class="btn" title="Otwórz plik (Ctrl+O)">
+        <input id="fileInput" type="file" accept="application/pdf" class="hidden" />
+        📂 Otwórz
+      </label>-->
+      <button id="btnSidebar" class="btn" title="Pokaż/ukryj pasek boczny (T)">📑 Pasek</button>
+      <div class="seg" role="group" aria-label="Nawigacja">
+        <button id="prevPage" class="btn" title="Poprzednia strona (PgUp)">←</button>
+        <input id="pageNum" class="num" type="number" min="1" value="1" />
+        <span id="pageCount" class="btn ghost" style="min-width:72px; justify-content:center">/ 1</span>
+        <button id="nextPage" class="btn" title="Następna strona (PgDn)">→</button>
+      </div>
+      <div class="seg" role="group" aria-label="Powiększenie">
+        <button id="zoomOut" class="btn" title="Powiększenie −10% (Ctrl−)">−</button>
+        <button id="zoomOutBig" class="btn" title="Powiększenie −25%">−−</button>
+        <span id="zoomLabel" class="btn ghost" style="min-width:72px; justify-content:center">100%</span>
+        <button id="zoomIn" class="btn" title="Powiększenie +10% (Ctrl+)">+</button>
+        <button id="zoomInBig" class="btn" title="Powiększenie +25%">++</button>
+        <button id="fitWidth" class="btn" title="Dopasuj do szerokości (W)">↔︎</button>
+        <button id="fitPage" class="btn" title="Dopasuj całą stronę (H)">↕︎</button>
+        <button id="zoomReset" class="btn" title="Domyślne (Ctrl+0)">100%</button>
+      </div>
+      <div class="seg" role="group" aria-label="Obrót">
+        <button id="rotateL" class="btn" title="Obróć w lewo (R)">⟲</button>
+        <button id="rotateR" class="btn" title="Obróć w prawo (Shift+R)">⟳</button>
+      </div>
+
+      <!--<input id="searchInput" class="search" type="search" placeholder="Szukaj (Ctrl+F)" />
+      <div class="seg" role="group" aria-label="Wyniki wyszukiwania">
+        <button id="findPrev" class="btn" title="Poprzedni (Shift+Enter)">↑</button>
+        <span id="findCount" class="btn ghost" style="min-width:72px; justify-content:center">0/0</span>
+        <button id="findNext" class="btn" title="Następny (Enter)">↓</button>
+      </div>-->
+
+      <div class="spacer"></div>
+      <button id="toolboxToggle" class="btn toolbox-toggle" title="Przybornik (B)">🧰 Przybornik</button>
+      <span id="docTitle" class="title" title="Tytuł dokumentu">—</span>
+      <div class="seg" role="group" aria-label="Akcje">
+        <button id="download" class="btn" title="Pobierz (Ctrl+S)">⬇️</button>
+        <button id="print" class="btn" title="Drukuj (Ctrl+P)">🖨️</button>
+        <button id="fullscreen" class="btn" title="Pełny ekran (F)">⤢</button>
+      </div>
+    </div>
+
+    <aside class="sidebar" id="sidebar">
+      <!--<div class="side-tabs">
+        <button id="tabThumbs" class="btn">Miniatury</button>
+        <button id="tabOutline" class="btn">Spis treści</button>
+      </div>-->
+      <div id="paneThumbs" class="side-pane active"></div>
+      <div id="paneOutline" class="side-pane"></div>
+    </aside>
+
+    <main class="viewer-wrap" id="viewerWrap">
+      <div class="viewer" id="viewer" role="main" aria-label="Podgląd dokumentu PDF"></div>
+    </main>
+  </div>
+
+  <!-- Przybornik: ruchome okno -->
+  <div id="toolbox" class="toolbox" aria-label="Przybornik">
+    <div id="tbHead" class="tb-head">
+      <span class="tb-title">Przybornik</span>
+      <div class="spacer"></div>
+      <button id="tbClose" class="btn" title="Zamknij">✕</button>
+    </div>
+    <div class="tb-body">
+      <div class="tb-row">
+        <div class="tb-label">Narzędzia</div>
+        <div class="tb-controls">
+          <button class="tool-btn" data-tool="select" title="Zaznacz">🔲 Zazn.</button>
+          <button class="tool-btn" data-tool="pencil" title="Ołówek">✏️ Ołówek</button>
+          <button class="tool-btn" data-tool="brush" title="Pędzel">🖌️ Pędzel</button>
+          <button class="tool-btn" data-tool="eraser" title="Gumka">🩹 Gumka</button>
+          <button class="tool-btn" data-tool="note" title="Notatka">🗒️ Notatka</button>
+          <button class="tool-btn" data-tool="laser" title="Wskaźnik laserowy (tymczasowy)">🔴 Laser</button>
+        </div>
+      </div>
+      <div class="tb-row">
+        <div class="tb-label">Kolor i grubość</div>
+        <div class="tb-controls">
+          <input id="colorPicker" type="color" value="#ff5252" />
+          <div class="color-swatch" data-col="#ff5252" style="background:#ff5252"></div>
+          <div class="color-swatch" data-col="#22c55e" style="background:#22c55e"></div>
+          <div class="color-swatch" data-col="#38bdf8" style="background:#38bdf8"></div>
+          <div class="color-swatch" data-col="#f59e0b" style="background:#f59e0b"></div>
+          <label style="display:inline-flex; align-items:center; gap:6px; margin-left:8px;">Grubość
+            <input id="widthRange" type="range" min="1" max="24" value="3" />
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

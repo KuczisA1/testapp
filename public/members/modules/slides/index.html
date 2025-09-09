@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ChemDisk – Slides</title>
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <style>
+    html,body{height:100%;margin:0;background:#000}
+    #stage{position:fixed;inset:0}
+    iframe{width:100%;height:100%;border:0;display:block;background:#000}
+    .error{display:grid;place-items:center;height:100%;font:16px/1.4 system-ui,sans-serif;padding:24px;text-align:center;color:#e5e7eb;background:#0b1020}
+    .error h1{margin:0 0 8px;font-size:20px}
+    code{background:#111827;padding:2px 6px;border-radius:6px;color:#e5e7eb}
+  </style>
+</head>
+<body>
+  <div id="stage"><noscript>Włącz JavaScript, aby wczytać prezentację.</noscript></div>
+  <script>
+  (async () => {
+    const stage = document.getElementById('stage');
+    const qs = new URLSearchParams(location.search);
+    const id  = (qs.get('id') || '').trim();          // ID/URL/klucz
+    const mode = (qs.get('mode') || 'preview').trim().toLowerCase(); // preview|present|embed
+
+    // Schowaj parametry po starcie (estetyka).
+    if (id || qs.get('mode')) history.replaceState(null, '', location.pathname);
+
+    const url = '/.netlify/functions/slides-key'
+      + (id ? `?id=${encodeURIComponent(id)}&mode=${encodeURIComponent(mode)}` : `?mode=${encodeURIComponent(mode)}`);
+
+    try {
+      const resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+
+      // Akceptujemy różne formy odpowiedzi (stare/nowe):
+      const chosen =
+        data.url ||
+        (mode === 'present' ? data.presentUrl :
+         mode === 'embed'   ? data.embedUrl   :
+                              data.previewUrl) ||
+        data.embedUrl || data.presentUrl;
+
+      if (!chosen) throw new Error('Brak URL-a z funkcji.');
+
+      const iframe = document.createElement('iframe');
+      iframe.allowFullscreen = true;
+      iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+      iframe.sandbox = 'allow-scripts allow-same-origin allow-presentation';
+      iframe.src = chosen;
+      stage.innerHTML = '';
+      stage.appendChild(iframe);
+    } catch (e) {
+      stage.innerHTML = `
+        <div class="error">
+          <div>
+            <h1>Nie udało się załadować prezentacji</h1>
+            <p>${e.message}</p>
+            <p>Użyj <code>?id=</code> z: pełnym linkiem, samym ID lub nazwą klucza (np. <code>PREZENTACJA1</code>), albo ustaw <code>SLIDES_ID</code>.</p>
+          </div>
+        </div>`;
+      console.error(e);
+    }
+  })();
+  </script>
+</body>
+</html>

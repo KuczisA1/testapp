@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>ChemDisk – Chat</title>
+      <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+      <script defer src="/assets/js/auth.js"></script>
+
+    <!-- Ikony Google (Material Symbols) -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@32,400,0,0"
+    />
+
+    <!-- Główne style -->
+    <link rel="stylesheet" href="/members/modules/chat/style.css?v=1" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- GÓRNY NAGŁÓWEK Z LOGO -->
+      <header class="app-header">
+        <div class="brand">
+          <!-- Proste, lekkie logo ChemDisk (inline SVG) -->
+          <svg
+            class="logo"
+            viewBox="0 0 64 64"
+            aria-label="ChemDisk logo"
+            role="img"
+          >
+            <defs>
+              <linearGradient id="cdg" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0" stop-color="#1d7efd" />
+                <stop offset="1" stop-color="#8f6fff" />
+              </linearGradient>
+            </defs>
+            <circle cx="32" cy="32" r="30" fill="url(#cdg)" />
+            <text
+              x="32"
+              y="38"
+              text-anchor="middle"
+              font-size="26"
+              fill="#fff"
+              font-family="Poppins, Arial, sans-serif"
+              font-weight="600"
+            >
+              CD
+            </text>
+          </svg>
+
+          <div class="titles">
+            <h1 class="heading">ChemDisk</h1>
+            <h4 class="sub-heading">Jak mogę Ci dziś pomóc?</h4>
+          </div>
+        </div>
+
+        <!-- Pasek trybów (bez Imagen) -->
+        <nav class="mode-bar" aria-label="Tryby">
+          <button class="chip selected" aria-pressed="true" disabled>
+            <span class="material-symbols-rounded">chat</span> Chat
+          </button>
+          <button
+            id="matura-mode-btn"
+            class="chip"
+            aria-pressed="false"
+            title="Odpowiadaj jak egzaminator maturalny"
+          >
+            <span class="material-symbols-rounded">school</span> Tryb maturzysty
+          </button>
+        </nav>
+      </header>
+
+      <!-- SUGESTIE STARTOWE (tylko tekst, równe odstępy) -->
+      <ul class="suggestions">
+        <li class="suggestions-item">
+          <p class="text">
+            Wytłumacz doświadczenie z analizy jakościowej (matura) krok po kroku.
+          </p>
+          <span class="icon material-symbols-rounded">science</span>
+        </li>
+        <li class="suggestions-item">
+          <p class="text">Ułóż plan nauki do matury z chemii na 4 tygodnie.</p>
+          <span class="icon material-symbols-rounded">schedule</span>
+        </li>
+        <li class="suggestions-item">
+          <p class="text">
+            Sprawdź mój tok rozumowania w zadaniu stechiometrycznym.
+          </p>
+          <span class="icon material-symbols-rounded">checklist</span>
+        </li>
+        <li class="suggestions-item">
+          <p class="text">
+            Podaj modelową odpowiedź do zadania o równowadze chemicznej (EE).
+          </p>
+          <span class="icon material-symbols-rounded">analytics</span>
+        </li>
+      </ul>
+
+      <!-- KONTENER NA CZAT -->
+      <div class="chats-container" aria-live="polite"></div>
+
+      <!-- POLE WPROWADZANIA WIADOMOŚCI (CHAT) -->
+      <div class="prompt-container" role="region" aria-label="Wiadomość do czatu">
+        <div class="prompt-wrapper">
+          <form action="#" class="prompt-form">
+            <input
+              type="text"
+              placeholder="Napisz wiadomość..."
+              class="prompt-input"
+              required
+              aria-label="Treść wiadomości"
+            />
+            <div class="prompt-actions">
+              <!-- Załączniki -->
+              <div class="file-upload-wrapper" aria-label="Załącz plik">
+                <img src="" alt="" class="file-preview" />
+                <input
+                  id="file-input"
+                  type="file"
+                  accept="image/*, .pdf, .txt, .csv"
+                  hidden
+                />
+                <button
+                  type="button"
+                  class="file-icon material-symbols-rounded"
+                  title="Załącz plik"
+                  id="add-file-btn"
+                >
+                  attach_file
+                </button>
+                <button
+                  id="cancel-file-btn"
+                  type="button"
+                  class="material-symbols-rounded"
+                  title="Usuń załącznik"
+                >
+                  close
+                </button>
+              </div>
+
+              <!-- Sterowanie generowaniem -->
+              <button
+                id="stop-response-btn"
+                type="button"
+                class="material-symbols-rounded"
+                title="Zatrzymaj odpowiedź"
+              >
+                stop_circle
+              </button>
+              <button
+                id="send-prompt-btn"
+                class="material-symbols-rounded"
+                title="Wyślij"
+              >
+                arrow_upward
+              </button>
+            </div>
+          </form>
+
+          <!-- Motyw & czyszczenie -->
+          <button
+            id="theme-toggle-btn"
+            class="material-symbols-rounded"
+            title="Przełącz motyw"
+          >
+            light_mode
+          </button>
+          <button
+            id="delete-chats-btn"
+            class="material-symbols-rounded"
+            title="Wyczyść czat"
+          >
+            delete
+          </button>
+        </div>
+
+        <p class="disclaimer-text">
+          Model może popełniać błędy — zweryfikuj ważne informacje.
+        </p>
+      </div>
+    </div>
+
+    <!-- Szablon promptu dla TRYBU MATURZYSTY (wstrzykiwany w script.js) -->
+    <template id="matura-system-prompt">
+Jesteś egzaminatorem maturalnym. Odpowiadasz zwięźle i rzeczowo, zgodnie z najnowszą formułą maturalną.
+Priorytet: jasność kryteriów, punktacja, typowe błędy.
+Jeśli użytkownik poda treść zadania, oceniaj jak na egzaminie: „Co jest poprawne/niepoprawne i dlaczego”, a na końcu daj krótką, modelową odpowiedź.
+Gdy brakuje danych – poproś tylko o to, co niezbędne.
+Unikaj długich dygresji.
+W chemii podawaj jednostki, sprawdzaj istotne cyfry, pisz równania reakcji i uzasadnienia.
+    </template>
+
+    <!-- Skrypty -->
+    <script defer src="/members/modules/chat/script.js?v=1"></script>
+  </body>
+</html>

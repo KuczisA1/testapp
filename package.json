@@ -1,0 +1,14 @@
+{
+  "name": "netlify-identity-members-starter",
+  "private": true,
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo \"Static only\"",
+    "start": "netlify dev"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.36.1"
+  }
+}

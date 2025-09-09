@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChemDisk – PDF Viewer</title>
+
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/assets/logo-chemdisk.svg" />
+
+  <style>
+    :root{
+      /* ——— USTAWIENIA MASKI ——— */
+      --mask-gap: 0px;           /* odsunięcie całej maski od prawej krawędzi */
+      --rail-width: 96px;        /* docelowa szerokość pasa maski */
+      --rail-height: 25vh;       /* tylko 25% wysokości okna */
+      --scrollbar-w: 0px;        /* JS wpisze szerokość paska przewijania (jeśli jest) */
+    }
+
+    html, body { height: 100%; margin: 0; background: #0b0b0c; overflow: hidden; }
+
+    /* Iframe z podglądem */
+    #pdfFrame{
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      border: 0; display: none;
+      z-index: 1;
+      pointer-events: auto !important;
+      background: #000;
+    }
+
+    /* Overlay z komunikatami (lekki) */
+    #msg{
+      position: fixed; inset: 0; z-index: 2;
+      display: grid; place-items: center;
+      padding: 24px;
+      font: 16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color: #eaeaea; text-align: center;
+    }
+    #msg b{ color:#fff; }
+    #msg[hidden]{ display:none !important; }
+    .hint{ opacity:.85; font-size:14px; margin-top:.6rem; }
+
+    /* Root maski nie przechwytuje eventów; tylko „hitbox” je łapie */
+    #maskRoot{
+      position: fixed; inset: 0; z-index: 3; pointer-events: none;
+    }
+    #maskRoot[hidden]{ display:none !important; }
+
+    /* Pionowy pas po prawej – tylko górne 25% okna */
+    #maskRoot .rail{
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 4px);
+      right: calc(var(--mask-gap) + var(--scrollbar-w));
+      /* szerokość przycięta o realną szerokość paska przewijania strony */
+      width: max(0px, calc(var(--rail-width) - var(--scrollbar-w)));
+      height: var(--rail-height);
+      pointer-events: auto;
+      background: transparent;          /* całkiem niewidoczna */
+      border-bottom-left-radius: 12px;  /* estetyczne zaokrąglenie */
+    }
+
+    @media (max-width: 640px){
+      :root{
+        --rail-width: 72px;   /* węższy pas na mobile */
+      }
+    }
+  </style>
+</head>
+<body>
+  <iframe id="pdfFrame"
+          title="Podgląd PDF (Google Drive)"
+          allowfullscreen
+          webkitallowfullscreen
+          mozallowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-pointer-lock"></iframe>
+
+  <!-- Maska anty-popout (domyślnie: WŁĄCZONA; wyłącz ?mask=0) -->
+  <div id="maskRoot" hidden aria-hidden="true">
+    <div class="rail" hidden></div>
+  </div>
+
+  <div id="msg" hidden></div>
+
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const showMsg = (text, hint) => {
+        const box = $('msg');
+        box.innerHTML =
+          '<div><b>' + (text || 'Błąd') + '</b>' +
+          (hint ? '<div class="hint">' + hint + '</div>' : '') +
+          '</div>';
+        box.hidden = false;
+      };
+
+      // —— Parametry: ?id=ALIAS [wymagany], ?mode=gview (fallback), ?mask=0 (wyłącz maskę)
+      const params = new URLSearchParams(location.search);
+      const alias = (params.get('id') || '').trim();
+      const useGView = (params.get('mode') || '').toLowerCase() === 'gview';
+      const maskEnabled = (params.get('mask') || '') !== '0';
+
+      if (!alias) {
+        showMsg('Brak parametru ?id=ALIAS.',
+                'Użyj: /members/modules/pdf/index.html?id=TESTDOC1');
+        return;
+      }
+      if (!/^[A-Za-z0-9_:-]{1,50}$/.test(alias)) {
+        showMsg('Nieprawidłowy identyfikator.',
+                'Dozwolone znaki: litery, cyfry, _ - :');
+        return;
+      }
+
+      // ——— Pomiar szerokości paska przewijania strony (gdy jest widoczny) i zapis do CSS var
+      function updateScrollbarWidthVar(){
+        const sbw = window.innerWidth - document.documentElement.clientWidth; // 0 na macOS overlay
+        document.documentElement.style.setProperty('--scrollbar-w', (sbw > 0 ? sbw : 0) + 'px');
+      }
+      updateScrollbarWidthVar();
+      window.addEventListener('resize', updateScrollbarWidthVar);
+
+      // ——— Włącz maskę (wąski pas po prawej, tylko górne 25% wysokości)
+      if (maskEnabled) {
+        const maskRoot = $('maskRoot');
+        maskRoot.hidden = false;
+        maskRoot.querySelector('.rail').hidden = false;
+      }
+
+      // ——— Pobierz ukryte fileId
+      const endpoint = '/.netlify/functions/pdf-key?key=' + encodeURIComponent(alias);
+      showMsg('Ładowanie dokumentu…');
+
+      fetch(endpoint, { credentials: 'same-origin' })
+        .then(async (r) => {
+          let data = null;
+          try { data = await r.json(); } catch (_) {}
+          if (!r.ok) throw new Error(data?.error || r.statusText || 'Błąd serwera');
+          return data;
+        })
+        .then(({ fileId }) => {
+          if (!fileId) throw new Error('Brak ID pliku dla aliasu "' + alias + '".');
+
+          // ——— URL viewer’a
+          const src = useGView
+            ? 'https://docs.google.com/gview?embedded=true&url=' +
+              encodeURIComponent('https://drive.google.com/uc?export=download&id=' + fileId)
+            : 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/preview';
+
+          const frame = $('pdfFrame');
+          frame.src = src;
+
+          // Po załadowaniu pokaż iframe i schowaj overlay
+          frame.addEventListener('load', () => {
+            frame.style.display = 'block';
+            $('msg').hidden = true;
+          });
+
+          // Minimalna diagnostyka CSS
+          const cs = getComputedStyle(frame);
+          if (cs.pointerEvents === 'none') frame.style.pointerEvents = 'auto';
+        })
+        .catch((e) => {
+          showMsg('Nie udało się wczytać dokumentu.',
+                  (e && e.message ? e.message + '<br>' : '') +
+                  'Sprawdź alias oraz zmienną środowiskową <b>PDF_' + alias.toUpperCase() + '</b>. ' +
+                  'Możesz też dodać <code>?mode=gview</code>.');
+        });
+    })();
+  </script>
+</body>
+</html>
