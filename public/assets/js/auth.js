@@ -167,107 +167,7 @@
     location.replace(path); // bez dorzucania historii
   }
 
-  // ======== CROSS-DEVICE LOGOUT (wyloguj jeśli zalogowano się gdzie indziej) ========
-  // >>> Aby WYŁĄCZYĆ, zakomentuj cały ten blok LUB ustaw flagę na false:
-  const ENABLE_CROSS_DEVICE_LOGOUT = false;
-
-  let stopSessionWatcher = null;
-
-  function getLocalSessionVer()   { return localStorage.getItem('cd_session_ver') || ''; }
-  function setLocalSessionVer(v)  { if (v) localStorage.setItem('cd_session_ver', v); }
-  function clearLocalSessionVer() { localStorage.removeItem('cd_session_ver'); }
-
-  function genSessionVersion() {
-    // Losowy, prosty identyfikator sesji
-    const rnd = Math.random().toString(36).slice(2, 10);
-    const ts  = Date.now().toString(36);
-    return `${ts}-${rnd}`;
-  }
-
-  async function fetchRemoteUser(token) {
-    const res = await fetch('/.netlify/identity/user', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!res.ok) throw new Error('identity/user fetch failed');
-    return res.json();
-  }
-
-  async function seedSessionVersion() {
-    if (!ENABLE_CROSS_DEVICE_LOGOUT) return;
-    const ni = window.netlifyIdentity;
-    const u = ni.currentUser();
-    if (!u) { clearLocalSessionVer(); return; }
-    try {
-      const token = await u.jwt(true);
-      const data  = await fetchRemoteUser(token);
-      const ver   = data && data.user_metadata && data.user_metadata.current_session;
-      if (ver) setLocalSessionVer(ver);
-    } catch {}
-  }
-
-  async function commitNewSessionVersion() {
-    if (!ENABLE_CROSS_DEVICE_LOGOUT) return;
-    const ni = window.netlifyIdentity;
-    const u = ni.currentUser();
-    if (!u) return;
-    const ver = genSessionVersion();
-    try {
-      await u.update({ data: { current_session: ver } });
-      setLocalSessionVer(ver);
-    } catch {}
-  }
-
-  function startSessionWatcher() {
-    if (!ENABLE_CROSS_DEVICE_LOGOUT) return () => {};
-    let active = true;
-    let scheduled = false;
-
-    async function check() {
-      if (!active || !hasIdentity()) return;
-      const ni = window.netlifyIdentity;
-      const u  = ni.currentUser();
-      if (!u) return;
-      try {
-        // Daj przeglądarce chwilę na pełną inicjalizację usera/JWT po nawigacji
-        await new Promise(r => setTimeout(r, 200));
-        const token = await u.jwt(true);
-        const data  = await fetchRemoteUser(token);
-        const serverVer = data && data.user_metadata && data.user_metadata.current_session;
-        const localVer  = getLocalSessionVer();
-        if (serverVer && localVer && serverVer !== localVer) {
-          clearJwtCookie();
-          clearLocalSessionVer();
-          try { await ni.logout(); } catch {}
-          safeGo(`${norm(PATHS.loginBase)}/`);
-        }
-      } catch {}
-    }
-
-    function scheduleCheck(delay = 250) {
-      if (!active || scheduled) return;
-      scheduled = true;
-      setTimeout(() => { scheduled = false; check(); }, delay);
-    }
-
-    const onPageShow = () => scheduleCheck(250);
-    const onVis = () => { if (document.visibilityState === 'visible') scheduleCheck(150); };
-    const onFocus = () => scheduleCheck(150);
-
-    window.addEventListener('pageshow', onPageShow);
-    document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('focus', onFocus);
-
-    // Pierwsze sprawdzenie po krótkiej chwili, aby uniknąć ścigania się z init
-    scheduleCheck(300);
-
-    return () => {
-      active = false;
-      window.removeEventListener('pageshow', onPageShow);
-      document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('focus', onFocus);
-    };
-  }
-  // ======== /CROSS-DEVICE LOGOUT ========
+  // (Usunięto cross-device logout: brak ukrytych wylogowań, zero pollingu)
 
   // ===== Guard właściwy =====
   async function guardAndPaintCore() {
@@ -345,15 +245,8 @@
       if (user) {
         const ok = await ensureFreshJwtCookieOrLogout();
         if (!ok) { await runGuard(); return; }
-        if (ENABLE_CROSS_DEVICE_LOGOUT) {
-          await seedSessionVersion();
-          if (stopSessionWatcher) stopSessionWatcher();
-          stopSessionWatcher = startSessionWatcher();
-        }
       } else {
         clearJwtCookie();
-        clearLocalSessionVer();
-        if (stopSessionWatcher) { stopSessionWatcher(); stopSessionWatcher = null; }
       }
       await runGuard();
     });
@@ -362,21 +255,12 @@
       updateAuthLinks(user);
       const ok = await ensureFreshJwtCookieOrLogout();
       if (!ok) return;
-      if (ENABLE_CROSS_DEVICE_LOGOUT) {
-        // Nowa sesja zastępuje wszystkie inne: zapisz wersję po stronie serwera i lokalnie
-        await commitNewSessionVersion();
-        await seedSessionVersion();
-        if (stopSessionWatcher) stopSessionWatcher();
-        stopSessionWatcher = startSessionWatcher();
-      }
       safeGo(PATHS.dashboard);
     });
 
     window.netlifyIdentity.on('logout', () => {
       updateAuthLinks(null);
       clearJwtCookie();
-      clearLocalSessionVer();
-      if (stopSessionWatcher) { stopSessionWatcher(); stopSessionWatcher = null; }
       safeGo(PATHS.home[0]); // '/'
     });
 
