@@ -84,6 +84,16 @@ function maybeInit(){
   });
 }
 
+function whenReady(fn){
+  if (state.player && state.apiReady && state.confReady) { try{ fn(); }catch{} return; }
+  const start = Date.now();
+  const id = setInterval(() => {
+    if (state.player && state.apiReady && state.confReady) { clearInterval(id); try{ fn(); }catch{} }
+    else if ((Date.now()-start) > 8000) { clearInterval(id); }
+    else { maybeInit(); }
+  }, 150);
+}
+
 /* --- YT events --- */
 function onReady(){
   try{
@@ -279,12 +289,12 @@ function startOrToggle(){
       state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0, suggestedQuality: 'large' });
       // attempt to autoplay muted to bypass gesture requirement and pre-roll stalls
       try { state.player.mute(); state.player.playVideo(); } catch {}
-      // stall watchdog: if not PLAYING within 4s, try host fallback
+      // stall watchdog: if still UNSTARTED after 4s, try host fallback
       if (state.stallTimer) { clearTimeout(state.stallTimer); state.stallTimer = null; }
       state.stallTimer = setTimeout(() => {
         try {
           const st = state.player.getPlayerState();
-          if (st !== YT.PlayerState.PLAYING && !state.triedFallback && state.host !== 'https://www.youtube.com') {
+          if (st === YT.PlayerState.UNSTARTED && !state.triedFallback && state.host !== 'https://www.youtube.com') {
             state.triedFallback = true;
             tryFallbackHost('https://www.youtube.com');
           }
@@ -312,17 +322,17 @@ function tryFallbackHost(host){
     }
     state.player = null;
     state.host = host;
+    state.loadedOnce = false;
     setMsg('Przełączam tryb odtwarzacza...');
     maybeInit();
-    // attempt to load ID immediately after init; slight delay to ensure iframe is ready
-    setTimeout(() => {
+    whenReady(() => {
       try {
         state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0, suggestedQuality: 'large' });
         try { state.player.mute(); state.player.playVideo(); } catch {}
         state.loadedOnce = true;
         setMsg('');
       } catch {}
-    }, 200);
+    });
   } catch {}
 }
 

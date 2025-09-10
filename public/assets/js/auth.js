@@ -215,7 +215,7 @@
       const data  = await fetchRemoteUser(token);
       const ver   = data && data.user_metadata && data.user_metadata.current_session;
       if (ver) setLocalSessionVer(ver);
-      const ls  = toTs((data && (data.last_login || data.last_sign_in_at || data.updated_at || data.confirmed_at || data.created_at)) || 0);
+      const ls  = toTs((data && (data.last_login || data.last_sign_in_at || data.last_signin_at || data.updated_at || data.confirmed_at || data.created_at)) || 0);
       if (ls) setLocalLastSignIn(ls);
     } catch {}
   }
@@ -229,7 +229,7 @@
       const data  = await fetchRemoteUser(token);
       const serverVer = data && data.user_metadata && data.user_metadata.current_session;
       const localVer  = getLocalSessionVer();
-      const serverLS  = toTs((data && (data.last_login || data.last_sign_in_at || data.updated_at || data.confirmed_at || data.created_at)) || 0);
+      const serverLS  = toTs((data && (data.last_login || data.last_sign_in_at || data.last_signin_at || data.updated_at || data.confirmed_at || data.created_at)) || 0);
       const localLS   = getLocalLastSignIn();
       const sessionMismatch = !!(serverVer && localVer && serverVer !== localVer);
       const signInMoved    = !!(serverLS && localLS && serverLS > localLS);
