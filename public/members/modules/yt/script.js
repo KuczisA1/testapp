@@ -1,10 +1,12 @@
 /* ====== ChemDisk YT Player – pełne okno, overlay click, dblclick/tap fullscreen ====== */
+/* Wersja z config.json:
+   - Plik ./config.json zawiera mapę kluczy -> ID filmu YouTube (11 znaków).
+   - Użycie: index.html?id=id_film1 wybierze wpis "id_film1" z config.json.
+*/
 
 const qs = (s) => document.querySelector(s);
 function fmtTime(s){ s=Math.max(0,Math.floor(s||0)); const m=Math.floor(s/60), r=s%60; return `${m}:${String(r).padStart(2,"0")}`; }
-function decodeObf(arr){ return String.fromCharCode(...arr.map(n => n ^ 73)); } // XOR 73
 function maskId(id){ if(!id) return ""; return id.length<=4 ? "***" : id.slice(0,2)+"*".repeat(id.length-4)+id.slice(-2); }
-async function safeJson(r){ try{ return await r.json(); } catch{ return null; } }
 
 window.addEventListener("contextmenu", e => e.preventDefault(), {capture:true});
 window.addEventListener("keydown", e => {
@@ -15,7 +17,7 @@ window.addEventListener("keydown", e => {
 const state = {
   domReady:false, apiReady:false, confReady:false,
   player:null, ticker:null, dragging:false, loadedOnce:false,
-  videoId:null, key:null, elements:{}, hideTimer:null
+  videoId:null, key:null, elements:{}, hideTimer:null, cfg:{}
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -40,31 +42,42 @@ document.addEventListener("DOMContentLoaded", () => {
 
 window.onYouTubeIframeAPIReady = () => { state.apiReady = true; maybeInit(); };
 
-/* --- Env/Netlify config --- */
+/* --- Konfiguracja z config.json --- */
 async function fetchConfig(){
   try{
     const p = new URLSearchParams(location.search);
-    const defKey = "YT_FILM1";
-    state.key = (p.get("id") || defKey).toUpperCase();
+    // domyślny klucz, jeśli nie podano query param ?id=
+    state.key = (p.get("id") || "id_film1").toLowerCase();
 
-    const r = await fetch(`/.netlify/functions/yt-key?id=${encodeURIComponent(state.key)}`, { cache:"no-store" });
+    const r = await fetch("./config.json", { cache:"no-store" });
     if (!r.ok) {
-      const e = await safeJson(r);
-      setMsg(e?.error === "not_found_or_bad_length"
-        ? `Brak ENV "${state.key}" albo ma złą długość (11 znaków).`
-        : `Błąd pobierania klucza (${r.status}).`);
+      setMsg(`Nie można odczytać config.json (${r.status}). Upewnij się, że plik istnieje obok index.html.`);
       return;
     }
-    const data = await r.json(); // { ok, key, obf:[...] }
-    if (!data?.ok || !Array.isArray(data.obf)) { setMsg("Zła odpowiedź serwera z kluczem."); return; }
+    const data = await r.json();
+    if (!data || typeof data !== "object") { setMsg("config.json ma nieprawidłowy format (oczekiwano obiektu)."); return; }
 
-    state.videoId = decodeObf(data.obf);
-    if (state.videoId.length !== 11) { setMsg("ID z ENV wygląda na niepoprawne (nie 11 znaków)."); return; }
+    state.cfg = data;
+    const rawId = data[state.key];
+    if (!rawId) {
+      const keys = Object.keys(data);
+      setMsg(keys.length
+        ? `Brak klucza "${state.key}" w config.json. Dostępne: ${keys.join(", ")}`
+        : `config.json nie zawiera żadnych wpisów z ID filmu.`);
+      return;
+    }
+
+    state.videoId = String(rawId).trim();
+    if (state.videoId.length !== 11) {
+      setMsg(`Wpis "${state.key}" ma niepoprawne ID (musi mieć 11 znaków). Otrzymano długość: ${state.videoId.length}.`);
+      return;
+    }
 
     state.confReady = true;
     maybeInit();
-  }catch{
-    setMsg("Nie udało się pobrać konfiguracji ID.");
+  }catch(err){
+    console.error("fetchConfig error:", err);
+    setMsg("Nie udało się pobrać lub sparsować config.json.");
   }
 }
 
@@ -109,7 +122,7 @@ function onStateChange(ev){
 function onError(e){
   const code = e?.data;
   const map = {
-    2:"Błąd parametrów (ID nieprawidłowe). Sprawdź ENV.",
+    2:"Błąd parametrów (ID nieprawidłowe). Sprawdź config.json.",
     5:"Błąd odtwarzacza HTML5.",
     101:"Autor wyłączył osadzanie filmu (embed disabled).",
     150:"Autor wyłączył osadzanie filmu (embed disabled)."
@@ -253,7 +266,7 @@ async function overlayToggleFullscreen(){
 /* --- Start or toggle playback --- */
 function startOrToggle(){
   if (!state.loadedOnce) {
-    if (!state.videoId) { setMsg("Brak ID – nie pobrało się z ENV."); return; }
+    if (!state.videoId) { setMsg("Brak ID – sprawdź config.json lub parametr ?id="); return; }
     try {
       state.player.loadVideoById({ videoId: state.videoId, startSeconds: 0 });
       state.loadedOnce = true;
@@ -335,8 +348,9 @@ function togglePlay(){
 function safeGetTime(){ try { return state.player.getCurrentTime() || 0; } catch { return 0; } }
 function safeGetDuration(){ try { return state.player.getDuration() || 0; } catch { return 0; } }
 
-/* Diagnostyka (bez ujawniania pełnego ID) */
+/* Diagnostyka */
 window.__yt_diag = () => ({
   ytApiLoaded: !!window.YT, domReady: state.domReady, apiReady: state.apiReady, confReady: state.confReady,
-  playerReady: !!state.player, key: state.key, idLen: state.videoId ? state.videoId.length : 0, idMasked: maskId(state.videoId)
+  playerReady: !!state.player, key: state.key, idLen: state.videoId ? state.videoId.length : 0, idMasked: maskId(state.videoId),
+  availableKeys: Object.keys(state.cfg||{})
 });
