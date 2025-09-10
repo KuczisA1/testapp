@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="/login/style.css" />
   <!-- Widget Identity (dla sesji i eventów) -->
   <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <!-- Wspólny skrypt auth (pomaga m.in. z nf_jwt i single-device) -->
+  <script defer src="/assets/js/auth.js"></script>
 </head>
 <body>
   <div class="wrapper">
@@ -74,6 +76,18 @@
       document.cookie = `nf_jwt=${token}; Path=/;${secure} SameSite=Lax; Max-Age=3600`;
     };
 
+    // Ustaw/odśwież znacznik sesji (single-device) po zalogowaniu
+    async function stampCurrentSession(user){
+      try{
+        if (!user) return;
+        const sid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+        await user.update({ data: { current_session: sid } });
+        try { await user.jwt(true); } catch {}
+        // lokalny cache do szybkiego porównania po odświeżeniu
+        try { localStorage.setItem('cd_session_ver', sid); } catch {}
+      }catch{}
+    }
+
     // Tabs
     const tabBtns = document.querySelectorAll(".tab-btn");
     const forms = document.querySelectorAll(".form");
@@ -116,6 +130,8 @@
           const user = await netlifyIdentity.gotrue.login(email, password, true);
           try { await netlifyIdentity.refresh(); } catch {}
           try { const t = await user.jwt(); setJwtCookie(t); } catch {}
+          // Zaktualizuj znacznik sesji dla single-device
+          try { await stampCurrentSession(user); } catch {}
           flash("Zalogowano. Przenoszę na dashboard...", "success");
           window.location.replace("/dashboard.html");
         } catch (err) {
@@ -152,6 +168,7 @@
             const u = await netlifyIdentity.gotrue.login(email, password, true);
             try { await netlifyIdentity.refresh(); } catch {}
             try { const t = await u.jwt(); setJwtCookie(t); } catch {}
+            try { await stampCurrentSession(u); } catch {}
             window.location.replace("/dashboard.html");
           } catch {}
         } catch (err) {
