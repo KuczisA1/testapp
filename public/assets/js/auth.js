@@ -41,6 +41,11 @@
   function clearJwtCookie() {
     document.cookie = 'nf_jwt=; Path=/; Max-Age=0; Secure; SameSite=Lax';
   }
+  function getCookie(name){
+    const m = document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function hasJwtCookie(){ return !!getCookie('nf_jwt'); }
 
   // ===== ROLE → STATUS =====
   function statusFromRoles(roles) {
@@ -262,10 +267,20 @@
       return; // gdy niezalogowany → zostań na /login/
     }
 
-    // DASHBOARD: jeśli niezalogowany → /login/ (ale dopiero PO init Identity)
+    // DASHBOARD: jeśli niezalogowany → spróbuj odzyskać usera, potem /login/
     if (onDashboard()) {
       if (!user) {
-        if (!identityReady) return; // poczekaj na init, unikaj fałszywych redirectów przy odświeżeniu
+        if (!identityReady) return; // czekaj na init
+        // Jeśli mamy cookie JWT, spróbuj odświeżyć usera
+        if (hasJwtCookie && hasJwtCookie()) {
+          try { await window.netlifyIdentity.refresh(); } catch {}
+          const ok2 = await ensureFreshJwtCookieOrLogout();
+          if (ok2) {
+            const u2 = window.netlifyIdentity.currentUser();
+            if (u2) { await paintUser(); return; }
+          }
+        }
+        // dalej brak usera → login
         safeGo(`${norm(PATHS.loginBase)}/`);
         return;
       }
@@ -330,9 +345,7 @@
         await seedSessionVersion();
         try { await window.netlifyIdentity.refresh(); } catch {}
       } else {
-        clearJwtCookie();
-        clearLocalSessionVer();
-        clearRememberedUser();
+        // Nie czyść od razu – pozwól guardowi spróbować odświeżyć użytkownika
       }
       await runGuard();
     });
