@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Logowanie – Chemdisk</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/gotrue-js@1.5.0/dist/gotrue.min.js"></script>
+  <script defer src="/assets/js/auth.js"></script>
+  <style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:40px;}form{max-width:360px}label{display:block;margin:.5rem 0 .25rem}input{width:100%;padding:.5rem;margin-bottom:.5rem}button{padding:.5rem 1rem;margin-right:.5rem}</style>
+</head>
+<body>
+  <h1>Logowanie</h1>
+  <form id="auth-form">
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="email" required />
+    <label for="password">Hasło</label>
+    <input id="password" type="password" autocomplete="current-password" required />
+    <div style="margin: 1rem 0">
+      <button type="submit" id="login-btn">Zaloguj</button>
+      <button type="button" id="signup-btn">Zarejestruj</button>
+    </div>
+    <div id="msg" role="status" aria-live="polite"></div>
+  </form>
+
+  <hr />
+  <div>
+    <button id="delete-account-btn" style="background:#c13;color:white">Usuń konto</button>
+    <button id="logout-btn">Wyloguj</button>
+  </div>
+
+  <p style="margin-top:1rem"><a href="/">Powrót</a></p>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+    const msg = (t, ok=false) => { el('msg').textContent = t; el('msg').style.color = ok ? 'green':'#c13'; };
+
+    document.getElementById('auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = el('email').value.trim();
+      const password = el('password').value;
+      msg('Logowanie...');
+      try {
+        await window.chemdiskAuth.login(email, password);
+        msg('Zalogowano. Przekierowanie...', true);
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        msg('Błąd logowania: ' + (err?.message || err));
+      }
+    });
+
+    document.getElementById('signup-btn').addEventListener('click', async () => {
+      const email = el('email').value.trim();
+      const password = el('password').value;
+      if (!email || !password) return msg('Podaj email i hasło');
+      msg('Rejestracja...');
+      try {
+        await window.chemdiskAuth.signup(email, password);
+        msg('Konto utworzone i zalogowano. Przekierowanie...', true);
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        msg('Błąd rejestracji: ' + (err?.message || err));
+      }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      await window.chemdiskAuth.logout();
+      msg('Wylogowano', true);
+    });
+
+    document.getElementById('delete-account-btn').addEventListener('click', async () => {
+      if (!confirm('Na pewno usunąć konto?')) return;
+      try {
+        await window.chemdiskAuth.deleteAccount();
+        msg('Konto usunięte.', true);
+      } catch (err) {
+        msg('Błąd usuwania: ' + (err?.message || err));
+      }
+    });
+  </script>
+</body>
+</html>
+

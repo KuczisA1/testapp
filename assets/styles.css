@@ -1,0 +1,4 @@
+/* Minimalne style */
+body { background: #fff; color: #222; }
+a.btn, button.btn { background:#1a73e8; color:#fff; padding:.5rem 1rem; border-radius:6px; text-decoration:none; }
+

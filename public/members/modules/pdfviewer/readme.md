@@ -1,1 +1,0 @@
-http://localhost:1234/index.html?path=nazwa.pdf&title=Regulamin%20Faa&version=2

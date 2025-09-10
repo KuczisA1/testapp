@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chemdisk – Kurs maturalny</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/gotrue-js@1.5.0/dist/gotrue.min.js"></script>
+  <script defer src="/assets/js/auth.js"></script>
+  <script defer src="/assets/js/index.js"></script>
+  <meta name="robots" content="noindex" />
+  <style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:40px;}</style>
+  
+  <script>
+    // Przekieruj zalogowanego użytkownika prosto do dashboard
+    document.addEventListener('DOMContentLoaded', () => {
+      const user = window.chemdiskAuth.currentUser();
+      if (user) {
+        window.location.href = '/dashboard.html';
+      }
+    });
+  </script>
+  
+  <noscript>Ta aplikacja wymaga JavaScript.</noscript>
+  
+  <!-- Netlify Identity aktywuje endpointy /.netlify/identity/* -->
+</head>
+<body>
+  <h1>Chemdisk – kurs maturalny</h1>
+  <p>Witamy! Zaloguj się lub utwórz konto, aby przejść dalej.</p>
+  <p>
+    <a href="/login.html" class="btn">Przejdź do logowania</a>
+  </p>
+  <p>
+    Nie masz konta? Zarejestruj się również na stronie logowania.
+  </p>
+</body>
+</html>
+

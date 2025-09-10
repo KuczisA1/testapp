@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Members – Chemdisk</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/gotrue-js@1.5.0/dist/gotrue.min.js"></script>
+  <script defer src="/assets/js/auth.js"></script>
+  <style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:40px;}</style>
+</head>
+<body>
+  <h1>Strefa members</h1>
+  <div id="content">Ładowanie...</div>
+  <p style="margin-top:1rem"><a href="/dashboard.html">Wróć do dashboard</a></p>
+  <script>
+    async function load() {
+      const user = window.chemdiskAuth.currentUser();
+      if (!user) {
+        window.location.href = '/login.html';
+        return;
+      }
+      await window.chemdiskAuth.syncPendingIfExpired();
+      const token = await window.chemdiskAuth.jwt();
+      try {
+        const res = await fetch('/.netlify/functions/members-content', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.status === 401 || res.status === 403) {
+          document.getElementById('content').innerHTML = 'Dostęp tylko dla aktywnych członków.';
+          setTimeout(() => window.location.href = '/dashboard.html', 1500);
+          return;
+        }
+        const html = await res.text();
+        document.getElementById('content').innerHTML = html;
+      } catch (e) {
+        document.getElementById('content').textContent = 'Błąd ładowania.';
+      }
+    }
+    load();
+  </script>
+</body>
+</html>
