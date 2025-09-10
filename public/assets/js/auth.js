@@ -8,7 +8,7 @@
   // ===== ŚCIEŻKI =====
   const PATHS = {
     home: ['/', '/index.html'],
-    dashboard: '/dashboard.html',
+    membersBase: '/members',
     loginBase: '/login',   // zakładamy public/login/index.html
   };
 
@@ -17,7 +17,7 @@
   const here = () => norm(location.pathname);
 
   const onHome = () => PATHS.home.includes(location.pathname);
-  const onDashboard = () => here() === norm(PATHS.dashboard);
+  const onMembers = () => here().startsWith(norm(PATHS.membersBase));
   const onLogin = () => here().startsWith(norm(PATHS.loginBase));
 
   // ===== STAN =====
@@ -175,29 +175,27 @@
 
     const user = window.netlifyIdentity.currentUser();
 
-    // HOME: jeśli zalogowany → dashboard
+    // HOME: jeśli zalogowany i ACTIVE → members
     if (onHome() && user) {
-      safeGo(PATHS.dashboard);
-      return;
+      const roles = (user.app_metadata && user.app_metadata.roles) || [];
+      const status = statusFromRoles(roles);
+      if (status === 'active') {
+        safeGo(`${norm(PATHS.membersBase)}/`);
+        return;
+      }
     }
 
-    // LOGIN: jeśli zalogowany → tylko po świeżym JWT idź na dashboard; inaczej zostań
+    // LOGIN: jeśli zalogowany → po świeżym JWT sprawdź rolę; ACTIVE → members, inaczej zostań
     if (onLogin()) {
       if (user) {
         const ok = await ensureFreshJwtCookieOrLogout();
-        if (ok) safeGo(PATHS.dashboard);
+        if (ok) {
+          const roles = (user.app_metadata && user.app_metadata.roles) || [];
+          const status = statusFromRoles(roles);
+          if (status === 'active') safeGo(`${norm(PATHS.membersBase)}/`);
+        }
       }
       return; // gdy niezalogowany → zostań na /login/
-    }
-
-    // DASHBOARD: jeśli niezalogowany → /login/
-    if (onDashboard()) {
-      if (!user) {
-        safeGo(`${norm(PATHS.loginBase)}/`);
-        return;
-      }
-      await paintUser();
-      return;
     }
 
     // Inne: opcjonalnie odśwież UI jeśli zalogowany
@@ -255,7 +253,14 @@
       updateAuthLinks(user);
       const ok = await ensureFreshJwtCookieOrLogout();
       if (!ok) return;
-      safeGo(PATHS.dashboard);
+      const roles = (user.app_metadata && user.app_metadata.roles) || [];
+      const status = statusFromRoles(roles);
+      if (status === 'active') {
+        safeGo(`${norm(PATHS.membersBase)}/`);
+      } else {
+        // pozostań na loginie
+        if (!onLogin()) safeGo(`${norm(PATHS.loginBase)}/`);
+      }
     });
 
     window.netlifyIdentity.on('logout', () => {

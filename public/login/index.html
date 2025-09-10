@@ -14,7 +14,6 @@
   <div class="wrapper">
     <div class="tabs" role="tablist" aria-label="Formularze uwierzytelniania">
       <button class="tab-btn active" data-tab="login" role="tab" aria-selected="true">Zaloguj się</button>
-      <button class="tab-btn" data-tab="register" role="tab" aria-selected="false">Stwórz użytkownika</button>
     </div>
 
     <div id="flash" class="flash" aria-live="polite"></div>
@@ -34,24 +33,7 @@
       <p class="helper">Zapomniałeś hasła? <a id="recover-link" href="#">Odzyskaj dostęp</a></p>
     </form>
 
-    <!-- Rejestracja -->
-    <form id="register-form" class="form" autocomplete="on" novalidate>
-      <h2>Rejestracja</h2>
-      <div class="input-field">
-        <input type="text" id="register-name" required autocomplete="given-name" />
-        <label for="register-name">Imię</label>
-      </div>
-      <div class="input-field">
-        <input type="email" id="register-email" required autocomplete="email" />
-        <label for="register-email">Email</label>
-      </div>
-      <div class="input-field">
-        <input type="password" id="register-password" required autocomplete="new-password" />
-        <label for="register-password">Hasło</label>
-      </div>
-      <button id="register-submit" type="submit">Stwórz konto</button>
-      <p class="helper">Po rejestracji możesz potrzebować potwierdzić email – sprawdź skrzynkę.</p>
-    </form>
+    <!-- Brak rejestracji: konta zakładane tylko przez administratora w Netlify -->
   </div>
 
   <script>
@@ -70,20 +52,22 @@
     };
 
     // Tabs
-    const tabBtns = document.querySelectorAll(".tab-btn");
-    const forms = document.querySelectorAll(".form");
-    tabBtns.forEach(btn => {
-      btn.addEventListener("click", () => {
-        tabBtns.forEach(b => { b.classList.remove("active"); b.setAttribute("aria-selected", "false"); });
-        forms.forEach(f => f.classList.remove("active"));
-        btn.classList.add("active");
-        btn.setAttribute("aria-selected", "true");
-        document.getElementById(btn.dataset.tab + "-form").classList.add("active");
-        flash(""); // czyść komunikaty
-      });
-    });
+    // Zakładki zostały usunięte (brak rejestracji)
 
     document.addEventListener("DOMContentLoaded", () => {
+      // Jeżeli już zalogowany i aktywny → przenieś do members
+      netlifyIdentity.on("init", (user) => {
+        if (user) {
+          try {
+            const roles = (user.app_metadata && user.app_metadata.roles) || [];
+            if (roles.includes('admin') || roles.includes('active')) {
+              window.location.replace("/members/");
+            }
+          } catch(e) {}
+        }
+      });
+      netlifyIdentity.init();
+
       // Logowanie (bez popupa)
       const loginBtn = document.getElementById("login-submit");
       loginBtn.dataset.label = "Zaloguj się";
@@ -98,43 +82,19 @@
           setBusy(loginBtn, true);
           await netlifyIdentity.gotrue.login(email, password, true);
           try { await netlifyIdentity.refresh(); } catch {}
-          flash("Zalogowano. Przenoszę na dashboard...", "success");
-          // auth.js zajmie się przekierowaniem
-          setTimeout(() => { window.location.replace("/dashboard.html"); }, 250);
+          const user = netlifyIdentity.currentUser();
+          const roles = (user && user.app_metadata && user.app_metadata.roles) || [];
+          const active = roles.includes('admin') || roles.includes('active');
+          if (active) {
+            flash("Zalogowano. Przenoszę...", "success");
+            setTimeout(() => { window.location.replace("/members/"); }, 250);
+          } else {
+            flash("Konto nieaktywne – zgłoś się do administratora w celu aktywacji.", "warn");
+          }
         } catch (err) {
           flash("Błąd logowania: " + (err?.message || err), "error");
         } finally {
           setBusy(loginBtn, false);
-        }
-      });
-
-      // Rejestracja (bez popupa)
-      const regBtn = document.getElementById("register-submit");
-      regBtn.dataset.label = "Stwórz konto";
-      document.getElementById("register-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        flash("");
-        const name = document.getElementById("register-name").value.trim();
-        const email = document.getElementById("register-email").value.trim();
-        const password = document.getElementById("register-password").value;
-        if (!name || !email || !password) return flash("Uzupełnij imię, email i hasło.", "warn");
-
-        try {
-          setBusy(regBtn, true);
-          await netlifyIdentity.gotrue.signup(email, password, { full_name: name, name });
-          flash("Konto utworzone. Sprawdź email, aby potwierdzić konto.", "success");
-
-          // Jeśli nie używasz weryfikacji email, można zalogować od razu:
-          try {
-            await netlifyIdentity.gotrue.login(email, password, true);
-            try { await netlifyIdentity.refresh(); } catch {}
-            // auth.js zajmie się przekierowaniem
-            setTimeout(() => { window.location.replace("/dashboard.html"); }, 250);
-          } catch {}
-        } catch (err) {
-          flash("Nie udało się utworzyć konta: " + (err?.message || err), "error");
-        } finally {
-          setBusy(regBtn, false);
         }
       });
 

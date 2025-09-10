@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Strefa kursanta</title>
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <script defer src="/assets/js/auth.js"></script>
+  <style>
+    html,body{height:100%;margin:0}
+    body{display:grid;place-items:center;font:16px/1.4 system-ui,Segoe UI,Roboto,Arial}
+    .card{padding:24px 28px;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.06)}
+    .row{display:flex;gap:12px;align-items:center;justify-content:center}
+    .btn{border:none;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;background:#ef4444;color:white}
+  </style>
+  <meta http-equiv="Cache-Control" content="no-store" />
+</head>
+<body>
+  <div class="card">
+    <div class="row">
+      <button id="logout-link" class="btn">Wyloguj</button>
+    </div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof netlifyIdentity !== 'undefined') {
+        try { netlifyIdentity.init(); } catch {}
+        netlifyIdentity.on('logout', () => location.replace('/'));
+        // jeśli ktoś tu trafi bez zalogowania, auth.js od razu cofnie na /login/
+      }
+    });
+  </script>
+</body>
+</html>
+
