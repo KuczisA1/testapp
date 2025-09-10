@@ -169,7 +169,7 @@
 
   // ======== CROSS-DEVICE LOGOUT (wyloguj jeśli zalogowano się gdzie indziej) ========
   // >>> Aby WYŁĄCZYĆ, zakomentuj cały ten blok LUB ustaw flagę na false:
-  const ENABLE_CROSS_DEVICE_LOGOUT = true;
+  const ENABLE_CROSS_DEVICE_LOGOUT = false;
 
   let stopSessionWatcher = null;
 
@@ -345,9 +345,11 @@
       if (user) {
         const ok = await ensureFreshJwtCookieOrLogout();
         if (!ok) { await runGuard(); return; }
-        await seedSessionVersion();
-        if (stopSessionWatcher) stopSessionWatcher();
-        stopSessionWatcher = startSessionWatcher();
+        if (ENABLE_CROSS_DEVICE_LOGOUT) {
+          await seedSessionVersion();
+          if (stopSessionWatcher) stopSessionWatcher();
+          stopSessionWatcher = startSessionWatcher();
+        }
       } else {
         clearJwtCookie();
         clearLocalSessionVer();
@@ -360,11 +362,13 @@
       updateAuthLinks(user);
       const ok = await ensureFreshJwtCookieOrLogout();
       if (!ok) return;
-      // Nowa sesja zastępuje wszystkie inne: zapisz wersję po stronie serwera i lokalnie
-      await commitNewSessionVersion();
-      await seedSessionVersion(); // defensywnie pobierz serwerowy stan
-      if (stopSessionWatcher) stopSessionWatcher();
-      stopSessionWatcher = startSessionWatcher();
+      if (ENABLE_CROSS_DEVICE_LOGOUT) {
+        // Nowa sesja zastępuje wszystkie inne: zapisz wersję po stronie serwera i lokalnie
+        await commitNewSessionVersion();
+        await seedSessionVersion();
+        if (stopSessionWatcher) stopSessionWatcher();
+        stopSessionWatcher = startSessionWatcher();
+      }
       safeGo(PATHS.dashboard);
     });
 

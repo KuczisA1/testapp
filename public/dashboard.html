@@ -153,6 +153,23 @@
               />
               <span id="profile-msg" class="notice" style="min-height:1.2em;"></span>
             </div>
+
+            <label for="username-input" style="display:block;margin-top:18px;">Nazwa użytkownika (bez spacji)</label>
+            <input
+              type="text"
+              id="username-input"
+              placeholder="np. jankowalski"
+              style="display:block;width:100%;max-width:420px;padding:10px 12px;border-radius:12px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.85);margin-top:6px;"
+            />
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;">
+              <input
+                type="button"
+                id="username-save"
+                value="Zapisz nazwę użytkownika"
+                class="btn-primary"
+              />
+              <span id="username-msg" class="notice" style="min-height:1.2em;"></span>
+            </div>
           </div>
 
           <!-- Sekcja: Hasło (link odzyskiwania) -->
@@ -276,6 +293,58 @@
             }
           });
         }
+
+        // Zapis nazwy użytkownika
+        const saveUsernameBtn = $("username-save");
+        if (saveUsernameBtn) {
+          saveUsernameBtn.addEventListener('click', async () => {
+            const msg = $("username-msg");
+            const inputEl = $("username-input");
+            const newName = (inputEl?.value || '').trim();
+            const user = hasIdentity() && window.netlifyIdentity.currentUser();
+            if (!user) { if (msg) msg.textContent = 'Musisz być zalogowany.'; return; }
+            if (!newName) { if (msg) msg.textContent = 'Podaj nazwę użytkownika.'; return; }
+            if (!/^[A-Za-z0-9_.-]{2,40}$/.test(newName)) {
+              if (msg) msg.textContent = 'Dozwolone: litery, cyfry, _ . - (2–40 znaków).';
+              return;
+            }
+            setBusy(saveUsernameBtn, true);
+            if (msg) msg.textContent = 'Zapisywanie...';
+            try {
+              await user.update({ data: { username: newName } });
+              try { await user.jwt(true); } catch {}
+              document.querySelectorAll('.js-username').forEach(el => el.textContent = newName);
+              if (msg) msg.textContent = 'Zapisano.';
+            } catch (e) {
+              if (msg) msg.textContent = 'Błąd zapisu: ' + (e?.message || 'spróbuj ponownie');
+            } finally {
+              setBusy(saveUsernameBtn, false);
+            }
+          });
+        }
+
+        // Uzupełnij wartości wejściowe danymi z konta
+        function fillInputsFromUser() {
+          if (!hasIdentity()) return;
+          const user = window.netlifyIdentity.currentUser();
+          if (!user) return;
+          const md = user.user_metadata || {};
+          const preferredDisplay = md.name || md.full_name || '';
+          const preferredUsername = md.username || md.preferred_username || (user.email ? user.email.split('@')[0] : '');
+          const disp = $("display-name");
+          if (disp && !disp.value) disp.value = preferredDisplay;
+          const uname = $("username-input");
+          if (uname && !uname.value) uname.value = preferredUsername;
+        }
+
+        if (hasIdentity()) {
+          try { window.netlifyIdentity.init(); } catch {}
+          window.netlifyIdentity.on('init', fillInputsFromUser);
+          window.netlifyIdentity.on('login', fillInputsFromUser);
+          window.netlifyIdentity.on('logout', () => location.replace('/'));
+        }
+        window.addEventListener('pageshow', fillInputsFromUser);
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fillInputsFromUser(); });
       });
     </script>
   </body>
