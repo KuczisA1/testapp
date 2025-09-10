@@ -186,16 +186,9 @@
 
   function getLocalSessionVer()   { return localStorage.getItem('cd_session_ver') || ''; }
   function setLocalSessionVer(v)  { if (v) localStorage.setItem('cd_session_ver', v); }
-  function clearLocalSessionVer() { localStorage.removeItem('cd_session_ver'); localStorage.removeItem('cd_last_sign_in'); }
-  function getLocalLastSignIn()   { return Number(localStorage.getItem('cd_last_sign_in') || 0); }
-  function setLocalLastSignIn(ts) { if (Number.isFinite(ts) && ts > 0) localStorage.setItem('cd_last_sign_in', String(ts)); }
+  function clearLocalSessionVer() { localStorage.removeItem('cd_session_ver'); }
 
-  function toTs(x){
-    if (!x) return 0;
-    if (typeof x === 'number') return x;
-    const t = Date.parse(String(x));
-    return Number.isFinite(t) ? t : 0;
-  }
+  // (usunięto dodatkowe porównanie znaczników czasu logowania — powodowało fałszywe konflikty po zmianie ról)
 
   async function fetchRemoteUser(token) {
     const res = await fetch('/.netlify/identity/user', {
@@ -215,8 +208,6 @@
       const data  = await fetchRemoteUser(token);
       const ver   = data && data.user_metadata && data.user_metadata.current_session;
       if (ver) setLocalSessionVer(ver);
-      const ls  = toTs((data && (data.last_login || data.last_sign_in_at || data.last_signin_at || data.updated_at || data.confirmed_at || data.created_at)) || 0);
-      if (ls) setLocalLastSignIn(ls);
     } catch {}
   }
   async function checkSessionMismatchOnce() {
@@ -229,11 +220,8 @@
       const data  = await fetchRemoteUser(token);
       const serverVer = data && data.user_metadata && data.user_metadata.current_session;
       const localVer  = getLocalSessionVer();
-      const serverLS  = toTs((data && (data.last_login || data.last_sign_in_at || data.last_signin_at || data.updated_at || data.confirmed_at || data.created_at)) || 0);
-      const localLS   = getLocalLastSignIn();
       const sessionMismatch = !!(serverVer && localVer && serverVer !== localVer);
-      const signInMoved    = !!(serverLS && localLS && serverLS > localLS);
-      if (sessionMismatch || signInMoved) {
+      if (sessionMismatch) {
         clearJwtCookie();
         clearLocalSessionVer();
         try { await ni.logout(); } catch {}
