@@ -186,7 +186,9 @@
 
   function getLocalSessionVer()   { return localStorage.getItem('cd_session_ver') || ''; }
   function setLocalSessionVer(v)  { if (v) localStorage.setItem('cd_session_ver', v); }
-  function clearLocalSessionVer() { localStorage.removeItem('cd_session_ver'); }
+  function clearLocalSessionVer() { localStorage.removeItem('cd_session_ver'); localStorage.removeItem('cd_last_sign_in'); }
+  function getLocalLastSignIn()   { return Number(localStorage.getItem('cd_last_sign_in') || 0); }
+  function setLocalLastSignIn(ts) { if (Number.isFinite(ts) && ts > 0) localStorage.setItem('cd_last_sign_in', String(ts)); }
 
   async function fetchRemoteUser(token) {
     const res = await fetch('/.netlify/identity/user', {
@@ -206,6 +208,8 @@
       const data  = await fetchRemoteUser(token);
       const ver   = data && data.user_metadata && data.user_metadata.current_session;
       if (ver) setLocalSessionVer(ver);
+      const ls  = Date.parse((data && (data.last_sign_in_at || data.updated_at)) || '') || 0;
+      if (ls) setLocalLastSignIn(ls);
     } catch {}
   }
   async function checkSessionMismatchOnce() {
@@ -218,7 +222,11 @@
       const data  = await fetchRemoteUser(token);
       const serverVer = data && data.user_metadata && data.user_metadata.current_session;
       const localVer  = getLocalSessionVer();
-      if (serverVer && localVer && serverVer !== localVer) {
+      const serverLS  = Date.parse((data && (data.last_sign_in_at || data.updated_at)) || '') || 0;
+      const localLS   = getLocalLastSignIn();
+      const sessionMismatch = !!(serverVer && localVer && serverVer !== localVer);
+      const signInMoved    = !!(serverLS && localLS && serverLS > localLS);
+      if (sessionMismatch || signInMoved) {
         clearJwtCookie();
         clearLocalSessionVer();
         try { await ni.logout(); } catch {}

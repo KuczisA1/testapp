@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Brak uprawnień</title>
+  <title>Brak uprawnień lub nie znaleziono</title>
   <link rel="stylesheet" href="/assets/dashboard/style.css" />
   <style>
     body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
@@ -15,24 +15,13 @@
 </head>
 <body>
   <div class="card">
-    <h1>Brak uprawnień</h1>
-    <p>Nie masz dostępu do tej sekcji. Jeśli masz wykupiony dostęp, zaloguj się lub poczekaj na aktywację konta przez administratora.</p>
+    <h1>Brak uprawnień lub strona nie istnieje</h1>
+    <p>Nie masz dostępu do tej zawartości lub wskazany adres jest nieprawidłowy. Zaloguj się lub wróć na stronę główną.</p>
     <div class="actions">
       <a class="btn" href="/login/">Przejdź do logowania</a>
       <a class="btn" href="/">Strona główna</a>
     </div>
   </div>
 </body>
-<script>
-  // Jeśli użytkownik jest zalogowany, ale nie ma roli, można go skierować na dashboard
-  document.addEventListener('DOMContentLoaded', function(){
-    if (window.netlifyIdentity) {
-      try { window.netlifyIdentity.init(); } catch{}
-      window.netlifyIdentity.on('init', function(user){
-        if (user) location.replace('/dashboard.html');
-      });
-    }
-  });
-</script>
+<!-- Brak automatycznych przekierowań – zostajemy na tej stronie -->
 </html>
-

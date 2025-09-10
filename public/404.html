@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Nie znaleziono</title>
+  <title>Brak uprawnień lub nie znaleziono</title>
   <link rel="stylesheet" href="/assets/dashboard/style.css" />
   <style>
     body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
@@ -14,18 +14,12 @@
 </head>
 <body>
   <div class="card">
-    <h1>Nie znaleziono strony</h1>
-    <p>Wygląda na to, że adres jest nieprawidłowy lub zasób jest niedostępny.</p>
-    <p>Za chwilę przeniesiemy Cię na stronę z informacją o braku dostępu.</p>
+    <h1>Brak uprawnień lub strona nie istnieje</h1>
+    <p>Wygląda na to, że nie masz dostępu do tej zawartości lub podany adres jest nieprawidłowy.</p>
     <div class="actions">
+      <a class="btn" href="/login/">Przejdź do logowania</a>
       <a class="btn" href="/">Strona główna</a>
-      <a class="btn" href="/unauthorized.html">Brak dostępu</a>
-      <a class="btn" href="/login/">Zaloguj</a>
     </div>
   </div>
-  <script>
-    setTimeout(() => { location.replace('/unauthorized.html'); }, 1200);
-  </script>
 </body>
 </html>
-
