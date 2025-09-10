@@ -20,39 +20,41 @@
   <p style="margin-top:1rem"><a href="/">Strona główna</a></p>
 
   <script>
-    const fmtDate = (d) => new Date(d).toLocaleString('pl-PL');
+    window.addEventListener('DOMContentLoaded', () => {
+      const fmtDate = (d) => new Date(d).toLocaleString('pl-PL');
 
-    async function load() {
-      const user = window.chemdiskAuth.currentUser();
-      if (!user) {
-        window.location.href = '/login.html';
-        return;
+      async function load() {
+        const user = window.chemdiskAuth.currentUser();
+        if (!user) {
+          window.location.href = '/login.html';
+          return;
+        }
+
+        // Zsynchronizuj wygasłe członkostwa do pending
+        await window.chemdiskAuth.syncPendingIfExpired();
+
+        const effective = window.chemdiskAuth.effectiveMembership(window.chemdiskAuth.currentUser());
+        const expiresAt = effective.expiresAt ? fmtDate(effective.expiresAt) : 'brak (nie wygasa)';
+        document.getElementById('user-box').textContent = `Zalogowano jako: ${user.email}`;
+        document.getElementById('status-box').innerHTML = `
+          <div>Rola: <strong>${effective.role}</strong></div>
+          <div>Status członkostwa: <strong>${effective.status}</strong></div>
+          <div>Start: ${effective.startedAt ? fmtDate(effective.startedAt) : '—'}</div>
+          <div>Wygasa: ${expiresAt}</div>
+        `;
+
+        // Members widoczny tylko gdy nie pending
+        const canAccessMembers = effective.status !== 'pending';
+        document.getElementById('members-link').style.display = canAccessMembers ? 'inline-block' : 'none';
       }
 
-      // Zsynchronizuj wygasłe członkostwa do pending
-      await window.chemdiskAuth.syncPendingIfExpired();
+      document.getElementById('logout-btn').addEventListener('click', async () => {
+        await window.chemdiskAuth.logout();
+        window.location.href = '/';
+      });
 
-      const effective = window.chemdiskAuth.effectiveMembership(window.chemdiskAuth.currentUser());
-      const expiresAt = effective.expiresAt ? fmtDate(effective.expiresAt) : 'brak (nie wygasa)';
-      document.getElementById('user-box').textContent = `Zalogowano jako: ${user.email}`;
-      document.getElementById('status-box').innerHTML = `
-        <div>Rola: <strong>${effective.role}</strong></div>
-        <div>Status członkostwa: <strong>${effective.status}</strong></div>
-        <div>Start: ${effective.startedAt ? fmtDate(effective.startedAt) : '—'}</div>
-        <div>Wygasa: ${expiresAt}</div>
-      `;
-
-      // Members widoczny tylko gdy nie pending
-      const canAccessMembers = effective.status !== 'pending';
-      document.getElementById('members-link').style.display = canAccessMembers ? 'inline-block' : 'none';
-    }
-
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-      await window.chemdiskAuth.logout();
-      window.location.href = '/';
+      load();
     });
-
-    load();
   </script>
 </body>
 </html>
