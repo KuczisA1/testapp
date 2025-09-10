@@ -181,10 +181,8 @@
   }
 
   // ======== CROSS-DEVICE LOGOUT (wyloguj jeśli zalogowano się gdzie indziej) ========
-  // >>> Aby WYŁĄCZYĆ, zakomentuj cały ten blok LUB ustaw flagę na false:
+  // Bez pętli/intervali – sprawdzamy przy init i ewentualnie przy zdarzeniach.
   const ENABLE_CROSS_DEVICE_LOGOUT = true;
-
-  let stopSessionWatcher = null;
 
   function getLocalSessionVer()   { return localStorage.getItem('cd_session_ver') || ''; }
   function setLocalSessionVer(v)  { if (v) localStorage.setItem('cd_session_ver', v); }
@@ -210,127 +208,28 @@
       if (ver) setLocalSessionVer(ver);
     } catch {}
   }
-
-  function startSessionWatcher() {
-    if (!ENABLE_CROSS_DEVICE_LOGOUT) return () => {};
-    let active = true;
-
-    async function check() {
-      if (!active || !hasIdentity()) return;
-      const ni = window.netlifyIdentity;
-      const u  = ni.currentUser();
-      if (!u) return;
-      try {
-        const token = await u.jwt(true);
-        const data  = await fetchRemoteUser(token);
-        const serverVer = data && data.user_metadata && data.user_metadata.current_session;
-        const localVer  = getLocalSessionVer();
-        if (serverVer && localVer && serverVer !== localVer) {
-          // Inna sesja zalogowana → wyloguj tutaj
-          clearJwtCookie();
-          clearLocalSessionVer();
-          try { await ni.logout(); } catch {}
-          safeGo(`${norm(PATHS.loginBase)}/`);
-        }
-      } catch {}
-    }
-
-    const id = setInterval(check, 30000); // co 30s
-    check(); // od razu
-    const onVis = () => { if (document.visibilityState === 'visible') check(); };
-    document.addEventListener('visibilitychange', onVis);
-
-    return () => {
-      active = false;
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onVis);
-    };
+  async function checkSessionMismatchOnce() {
+    if (!ENABLE_CROSS_DEVICE_LOGOUT || !hasIdentity()) return false;
+    const ni = window.netlifyIdentity;
+    const u  = ni.currentUser();
+    if (!u) return false;
+    try {
+      const token = await u.jwt(true);
+      const data  = await fetchRemoteUser(token);
+      const serverVer = data && data.user_metadata && data.user_metadata.current_session;
+      const localVer  = getLocalSessionVer();
+      if (serverVer && localVer && serverVer !== localVer) {
+        clearJwtCookie();
+        clearLocalSessionVer();
+        try { await ni.logout(); } catch {}
+        safeGo(`${norm(PATHS.loginBase)}/`);
+        return true;
+      }
+    } catch {}
+    return false;
   }
   // ======== /CROSS-DEVICE LOGOUT ========
 
-  // ======== SESJA 5h – licznik i auto-logout ========
-  let stopSessionTimer = null;
-
-  function formatHMS(ms) {
-    const s = Math.max(0, Math.floor(ms / 1000));
-    const hh = String(Math.floor(s / 3600)).padStart(2, '0');
-    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-    const ss = String(s % 60).padStart(2, '0');
-    return `${hh}:${mm}:${ss}`;
-  }
-
-  function startFiveHourTimerIfPossible() {
-    if (stopSessionTimer) { stopSessionTimer(); stopSessionTimer = null; }
-    if (!hasIdentity()) return () => {};
-    const u = window.netlifyIdentity.currentUser();
-    if (!u) return () => {};
-
-    const md = u.user_metadata || {};
-    const startedAt = Number(md.session_started_at || 0);
-    const maxSeconds = Number(md.session_max_seconds || (5 * 60 * 60));
-    if (!startedAt || !maxSeconds) return () => {};
-
-    const timerEl = document.getElementById('session-timer');
-    let active = true;
-
-    function tick() {
-      if (!active) return;
-      const now = Date.now();
-      const end = startedAt + (maxSeconds * 1000);
-      const left = end - now;
-      if (timerEl) {
-        timerEl.textContent = left > 0
-          ? `Pozostały czas sesji: ${formatHMS(left)}`
-          : 'Sesja wygasła';
-      }
-      if (left <= 0) { handleSessionExpiredGlobal(); }
-    }
-
-    tick();
-    const id = setInterval(tick, 1000);
-    return (stopSessionTimer = () => { active = false; clearInterval(id); });
-  }
-  // ======== /SESJA 5h ========
-
-  // ======== Globalny poller wygaśnięcia sesji (bez UI) ========
-  let stopExpiryPoller = null;
-
-  function handleSessionExpiredGlobal(){
-    // Delikatnie: wyloguj i przenieś na ekran startowy, bez pętli
-    clearJwtCookie();
-    try { window.netlifyIdentity.logout(); } catch {}
-    safeGo(PATHS.home[0]);
-  }
-
-  function startExpiryPoller(){
-    if (stopExpiryPoller) { stopExpiryPoller(); stopExpiryPoller = null; }
-    if (!hasIdentity()) return () => {};
-    const ni = window.netlifyIdentity;
-    let active = true;
-
-    async function check(){
-      if (!active) return;
-      const u = ni.currentUser();
-      if (!u) return;
-      const md = u.user_metadata || {};
-      const startedAt = Number(md.session_started_at || 0);
-      const maxSeconds = Number(md.session_max_seconds || 0);
-      if (!startedAt || !maxSeconds) return;
-      const end = startedAt + (maxSeconds * 1000);
-      if (Date.now() >= end) {
-        active = false;
-        handleSessionExpiredGlobal();
-      }
-    }
-
-    // Start i cykl co 30s + przy powrocie okna
-    check();
-    const id = setInterval(check, 30000);
-    const onVis = () => { if (document.visibilityState === 'visible') check(); };
-    document.addEventListener('visibilitychange', onVis);
-    return (stopExpiryPoller = () => { active = false; clearInterval(id); document.removeEventListener('visibilitychange', onVis); });
-  }
-  // ======== /Globalny poller ========
 
   // ===== Guard właściwy =====
   async function guardAndPaintCore() {
@@ -411,20 +310,15 @@
       rememberUser(user);
       updateAuthLinks(user);
       if (user) {
+        // Najpierw sprawdź konflikt sesji (inne urządzenie), bez pętli
+        const conflicted = await checkSessionMismatchOnce();
+        if (conflicted) return;
         const ok = await ensureFreshJwtCookieOrLogout();
         if (!ok) { await runGuard(); return; }
         await seedSessionVersion();
-        if (stopSessionWatcher) stopSessionWatcher();
-        stopSessionWatcher = startSessionWatcher();
-        // licznik sesji 5h + globalny poller
-        startFiveHourTimerIfPossible();
-        startExpiryPoller();
       } else {
         clearJwtCookie();
         clearLocalSessionVer();
-        if (stopSessionWatcher) { stopSessionWatcher(); stopSessionWatcher = null; }
-        if (stopSessionTimer) { stopSessionTimer(); stopSessionTimer = null; }
-        if (stopExpiryPoller) { stopExpiryPoller(); stopExpiryPoller = null; }
         clearRememberedUser();
       }
       await runGuard();
