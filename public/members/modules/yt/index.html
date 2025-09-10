@@ -1,57 +1,263 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ChemDisk – YT Player (Full)</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <meta name="referrer" content="strict-origin-when-cross-origin">
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-  <script defer src="/assets/js/auth.js"></script>
+  <title>YT Minimal Player</title>
+  <style>
+    :root{
+      --bg:#0b0f17; --panel:rgba(12,14,20,.85); --panel-hover:rgba(18,22,30,.92);
+      --brand:#4f8cff; --text:#eaf1ff; --muted:#9aa7bd; --radius:16px;
+    }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font:500 16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;overflow:hidden}
 
-  <script defer src="./script.js"></script>
-  <script src="https://www.youtube.com/iframe_api" referrerpolicy="strict-origin-when-cross-origin"></script>
-  <!-- Uwaga: odtwarzacz ładuje ID filmu z ./config.json -->
+    /* Pełne okno */
+    .frame{position:fixed;inset:0;background:#000;overflow:hidden}
+
+    /* IFrame i overlay */
+    #player,.frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;z-index:1}
+    .shield{position:absolute;inset:0;z-index:2;background:transparent;cursor:pointer;outline:none}
+    .shield:focus{box-shadow:0 0 0 2px rgba(79,140,255,.6) inset;border-radius:8px}
+
+    /* Belka i pasek czasu */
+    .controls{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;flex-direction:column;gap:10px;
+      padding:12px;background:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.35) 35%,rgba(0,0,0,.7) 100%);
+      opacity:0;transform:translateY(18px);transition:opacity .25s ease, transform .25s ease}
+    .controls.visible{opacity:1;transform:none}
+    .row{display:flex;align-items:center;gap:12px;background:var(--panel);backdrop-filter:blur(8px);
+      padding:10px 12px;border-radius:14px;margin:0 10px}
+    .row:hover{background:var(--panel-hover)}
+    .left,.right{display:flex;align-items:center;gap:10px}
+    .left{min-width:180px}
+    .right{min-width:260px}
+    .middle{position:relative;flex:1;display:flex;align-items:center;height:28px}
+
+    .btn{border:1px solid rgba(255,255,255,.08);background:transparent;color:var(--text);
+      padding:8px 12px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+    .btn:active{transform:translateY(1px)}
+    .icon{width:18px;height:18px}
+
+    .time{font-variant-numeric:tabular-nums;color:var(--muted)}
+
+    /* Pasek czasu (seek) + nasze warstwy progress/buffered */
+    .seek{
+      position:relative; -webkit-appearance:none; appearance:none; width:100%; height:6px;
+      background:transparent; /* baza przezroczysta, żeby nie przebijało szare */
+      border-radius:999px; outline:none; cursor:pointer; z-index:3;
+    }
+    /* ukrycie/wyzerowanie natywnego tła toru */
+    .seek::-webkit-slider-runnable-track{background:transparent; height:6px; border-radius:999px}
+    .seek::-moz-range-track{background:transparent; height:6px; border-radius:999px}
+
+    .seek::-webkit-slider-thumb{
+      appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;
+      box-shadow:0 0 0 6px rgba(79,140,255,.25);border:2px solid var(--brand);margin-top:-5px;
+    }
+    .seek::-moz-range-thumb{
+      width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--brand)
+    }
+
+    /* nasze paski pod suwakiem – pełna szerokość, bez marginesów */
+    .progress,.buffered{
+      position:absolute;left:0;right:0;height:6px;border-radius:999px;pointer-events:none;
+      transform-origin:left center;transform:scaleX(0); z-index:2;
+    }
+    .progress{background:linear-gradient(90deg,var(--brand),#56d3ff)}
+    .buffered{background:rgba(255,255,255,.25)}
+
+    .range{display:flex;align-items:center;gap:8px}
+    .range input[type=range]{width:120px}
+    .select{background:#111826;border:1px solid rgba(255,255,255,.08);color:var(--text);padding:8px 10px;border-radius:10px}
+
+    .overlay-center{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:4}
+    .msg{background:rgba(0,0,0,.6);padding:12px 16px;border-radius:8px}
+
+    @media (max-width:760px){ .range input[type=range]{width:90px} .btn .label{display:none} }
+  </style>
 </head>
 <body>
-  <main class="stage">
-    <div class="player-shell" id="playerShell" aria-label="Odtwarzacz wideo">
-      <div id="player" class="player" aria-hidden="true"></div>
-      <div class="click-overlay" id="clickOverlay" aria-hidden="true"></div>
+  <div class="frame" id="player-frame">
+    <div id="player"></div>
+    <div class="shield" id="shield" tabindex="0" aria-label="Nakładka sterująca"></div>
 
-      <div class="controls" id="controls" role="group" aria-label="Kontrolki odtwarzacza">
-        <button class="btn icon" id="playPause" aria-label="Odtwórz/Pauza">
-          <svg viewBox="0 0 24 24" class="i"><path d="M8 5v14l11-7z"/></svg>
-        </button>
+    <div class="controls" id="controls">
+      <div class="row">
+        <div class="left">
+          <button class="btn" id="playPause" title="Spacja">
+            <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5v14l11-7z"/></svg>
+            <span class="label">Odtwórz</span>
+          </button>
+          <div class="time"><span id="cur">0:00</span> / <span id="dur">0:00</span></div>
+        </div>
 
-        <span id="timeNow" class="time">0:00</span>
-        <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Przewijanie" />
-        <span id="timeDur" class="time">0:00</span>
+        <div class="middle">
+          <div class="buffered" id="buffered"></div>
+          <div class="progress" id="progress"></div>
+          <input type="range" min="0" max="1000" value="0" class="seek" id="seek" />
+        </div>
 
-        <button class="btn icon" id="muteToggle" aria-label="Wycisz/Włącz dźwięk">
-          <svg viewBox="0 0 24 24" class="i"><path d="M7 9v6h4l5 5V4l-5 5H7z"/></svg>
-        </button>
-        <input type="range" id="volume" min="0" max="100" value="100" aria-label="Głośność" />
-
-        <label class="rateLab">
-          <span class="sr-only">Prędkość</span>
-          <select id="rate" aria-label="Prędkość odtwarzania">
-            <option value="0.5">0.5×</option>
-            <option value="0.75">0.75×</option>
-            <option value="1" selected>1×</option>
-            <option value="1.25">1.25×</option>
-            <option value="1.5">1.5×</option>
-            <option value="2">2×</option>
-          </select>
-        </label>
-
-        <button class="btn icon" id="fullscreen" aria-label="Pełny ekran">
-          <svg viewBox="0 0 24 24" class="i"><path d="M7 14H5v5h5v-2H7v-3zm12 5h-5v-2h3v-3h2v5zM7 5h3V3H5v5h2V5zm12 0v3h-3v2h5V3h-2z"/></svg>
-        </button>
+        <div class="right">
+          <div class="range" title="Głośność (M wycisz)">
+            <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M4 10v4h3l4 4V6L7 10H4zm13.5 2a4.5 4.5 0 00-3.5-4.39v8.78A4.5 4.5 0 0017.5 12z"/></svg>
+            <input type="range" min="0" max="100" value="100" id="volume" />
+          </div>
+          <label>
+            <select class="select" id="rate" title="Prędkość (< i >)">
+              <option value="0.25">0.25×</option>
+              <option value="0.5">0.5×</option>
+              <option value="0.75">0.75×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.25">1.25×</option>
+              <option value="1.5">1.5×</option>
+              <option value="1.75">1.75×</option>
+              <option value="2">2×</option>
+            </select>
+          </label>
+          <button class="btn" id="fullscreen" title="F – pełny ekran">
+            <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm12 5h-5v-2h3v-3h2v5zM7 5h3V3H5v5h2V5zm12 3V3h-5v2h3v3h2z"/></svg>
+            <span class="label">Pełny ekran</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <div id="msg" class="msg" role="status" aria-live="polite"></div>
-  </main>
+    <div class="overlay-center" id="status"><div class="msg" id="statusMsg">Wczytywanie…</div></div>
+  </div>
+
+  <script>
+    // ------- elementy
+    const $ = s => document.querySelector(s);
+    const params = new URLSearchParams(location.search);
+    const key = params.get('id');
+
+    const controls = $('#controls'), seek = $('#seek'), progress = $('#progress'), bufferedBar = $('#buffered');
+    const playPause = $('#playPause'), playIcon = $('#playIcon');
+    const curEl = $('#cur'), durEl = $('#dur');
+    const vol = $('#volume'), rate = $('#rate'), fullscreenBtn = $('#fullscreen');
+    const shield = $('#shield');
+    const status = $('#status'), statusMsg = $('#statusMsg');
+
+    let player = null, duration = 0, hideTimer = null, isScrubbing = false;
+
+    // ------- helpers
+    const fmt = s => { s = Math.max(0, Math.floor(s||0));
+      const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), ss = s%60;
+      return h>0 ? `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${m}:${String(ss).padStart(2,'0')}`;
+    };
+    const showControls = () => {
+      controls.classList.add('visible'); document.body.style.cursor='auto';
+      clearTimeout(hideTimer); hideTimer = setTimeout(()=>{controls.classList.remove('visible'); document.body.style.cursor='none';}, 2000);
+    };
+    const setProgress = p => { progress.style.transform = `scaleX(${Math.max(0,Math.min(1,p))})`; };
+    const setBuffered = p => { bufferedBar.style.transform = `scaleX(${Math.max(0,Math.min(1,p))})`; };
+
+    ['mousemove','click','touchstart','touchmove','keydown'].forEach(e => document.addEventListener(e, showControls, {passive:true}));
+
+    // ------- config.json (prawdziwy JSON)
+    async function boot(){
+      if(!key){ statusMsg.textContent = 'Brakuje parametru ?id=… w URL'; return; }
+      try{
+        const data = await (await fetch('config.json', {cache:'no-store'})).json();
+        const ytId = data[key];
+        if(!ytId){ statusMsg.textContent = `Nie znaleziono wpisu dla id="${key}"`; return; }
+        initYT(ytId);
+      }catch(e){
+        console.error(e); statusMsg.textContent = 'Nie udało się wczytać config.json';
+      }
+    }
+
+    // ------- YouTube API
+    function loadYT(){ return new Promise(r => { const s=document.createElement('script'); s.src='https://www.youtube.com/iframe_api'; s.onload=r; document.head.appendChild(s); }); }
+    async function initYT(videoId){
+      await loadYT();
+      window.onYouTubeIframeAPIReady = () => {
+        player = new YT.Player('player', {
+          videoId,
+          playerVars: { autoplay:1, controls:0, modestbranding:1, rel:0, fs:0, playsinline:1, disablekb:1, origin:location.origin },
+          events: { onReady, onStateChange }
+        });
+      };
+    }
+
+    function onReady(){
+      status.style.display='none';
+      duration = Math.floor(player.getDuration());
+      durEl.textContent = fmt(duration);
+      vol.value = player.getVolume();
+
+      // startowe zerowanie pasków (brak „szarych brzegów”)
+      setProgress(0); setBuffered(0); seek.value = 0;
+
+      // pętla update UI
+      setInterval(()=>{
+        if(!player) return;
+        const t = player.getCurrentTime() || 0;
+        const d = player.getDuration() || duration || 0;
+        duration = d;
+        curEl.textContent = fmt(t);
+        durEl.textContent = fmt(d);
+        const p = d>0 ? t/d : 0;
+        if(!isScrubbing){
+          seek.value = Math.round(p*1000);
+          setProgress(p);
+        }
+        if(typeof player.getVideoLoadedFraction === 'function'){
+          setBuffered(player.getVideoLoadedFraction());
+        }
+      }, 200);
+      showControls();
+    }
+
+    function onStateChange(e){
+      const playing = e.data === YT.PlayerState.PLAYING;
+      playIcon.setAttribute('d', playing ? 'M6 5h4v14H6zM14 5h4v14h-4z' : 'M8 5v14l11-7z');
+      playPause.querySelector('.label').textContent = playing ? 'Pauza' : 'Odtwórz';
+    }
+
+    // ------- interakcje
+    const togglePlay = () => {
+      const st = player.getPlayerState();
+      if(st === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+    };
+
+    playPause.addEventListener('click', togglePlay);
+    shield.addEventListener('click', togglePlay);
+    shield.addEventListener('dblclick', ()=>{ document.fullscreenElement ? document.exitFullscreen() : $('#player-frame').requestFullscreen?.(); });
+
+    // live scrubbing (na bieżąco przesuwamy czas i pasek)
+    seek.addEventListener('input', ()=>{
+      isScrubbing = true;
+      const d = player.getDuration() || duration || 0;
+      const p = (seek.value/1000);
+      const t = p * d;
+      player.seekTo(t, true);
+      curEl.textContent = fmt(t);
+      setProgress(p);
+    });
+    ['change','mouseup','touchend','touchcancel','mouseleave'].forEach(ev=>seek.addEventListener(ev, ()=>{ isScrubbing=false; }));
+
+    vol.addEventListener('input', ()=> player.setVolume(parseInt(vol.value,10)) );
+    rate.addEventListener('change', ()=> player.setPlaybackRate(parseFloat(rate.value)) );
+
+    fullscreenBtn.addEventListener('click', ()=>{ document.fullscreenElement ? document.exitFullscreen() : $('#player-frame').requestFullscreen?.(); });
+
+    document.addEventListener('keydown', (e)=>{
+      if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+      switch(e.key){
+        case ' ': e.preventDefault(); togglePlay(); break;
+        case 'ArrowRight': player.seekTo(player.getCurrentTime()+5, true); break;
+        case 'ArrowLeft': player.seekTo(Math.max(0, player.getCurrentTime()-5), true); break;
+        case 'm': case 'M': player.isMuted()? player.unMute(): player.mute(); break;
+        case 'f': case 'F': fullscreenBtn.click(); break;
+        case ',': case '<': player.setPlaybackRate(Math.max(.25, player.getPlaybackRate()-0.25)); rate.value = player.getPlaybackRate(); break;
+        case '.': case '>': player.setPlaybackRate(Math.min(2, player.getPlaybackRate()+0.25)); rate.value = player.getPlaybackRate(); break;
+      }
+    });
+
+    // poka belkę na starcie
+    showControls();
+    boot();
+  </script>
 </body>
 </html>
