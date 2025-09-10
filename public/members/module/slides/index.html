@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ChemDisk – Slides</title>
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <style>
+    html,body{height:100%;margin:0;background:#000}
+    #stage{position:fixed;inset:0}
+    iframe{width:100%;height:100%;border:0;display:block;background:#000}
+    .error{display:grid;place-items:center;height:100%;font:16px/1.4 system-ui,sans-serif;padding:24px;text-align:center;color:#e5e7eb;background:#0b1020}
+    .error h1{margin:0 0 8px;font-size:20px}
+    code{background:#111827;padding:2px 6px;border-radius:6px;color:#e5e7eb}
+  </style>
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <script defer src="/assets/js/auth.js"></script>
+</head>
+<body>
+  <div id="stage"><noscript>Włącz JavaScript, aby wczytać prezentację.</noscript></div>
+  <script>
+  (async () => {
+    const stage = document.getElementById('stage');
+    const qs = new URLSearchParams(location.search);
+    const rawId  = (qs.get('id') || '').trim();          // ID lub pełny link
+    // Domyślnie używamy "preview" (frame-friendly). "present" bywa blokowany nagłówkami X-Frame-Options.
+    const mode = (qs.get('mode') || 'preview').trim().toLowerCase(); // preview (domyślnie) | present | embed
+    const typeParam = (qs.get('type') || '').trim();     // 1 = z przyciskami, 2 = bez
+
+    // Schowaj parametry po starcie (estetyka + ukrycie ID) – przejdź do root.
+    if (rawId || qs.get('mode') || typeParam) history.replaceState(null, '', '/');
+
+    // Mini ochrona przed konsolką / podglądem:
+    try {
+      // Wyłącz kontekstowe menu PPM
+      document.addEventListener('contextmenu', e => e.preventDefault(), { passive:false });
+      // Blokuj skróty konsolowe (F12, Ctrl+Shift+I/J/C, Ctrl+U)
+      document.addEventListener('keydown', e => {
+        const k = e.key?.toLowerCase();
+        if (e.keyCode === 123) return e.preventDefault(); // F12
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) return e.preventDefault();
+        if ((e.ctrlKey || e.metaKey) && ['u','s'].includes(k)) return e.preventDefault();
+      }, { capture:true });
+      // Prosta detekcja devtools – w razie wykrycia czyścimy scenę
+      const detect = () => {
+        const wDiff = window.outerWidth - window.innerWidth;
+        const hDiff = window.outerHeight - window.innerHeight;
+        return wDiff > 160 || hDiff > 160; // heurystyka
+      };
+      setInterval(() => {
+        if (detect()) {
+          stage.innerHTML = '';
+          document.body.innerHTML = '';
+          location.replace('/');
+        }
+      }, 800);
+      // Stłum konsolę (miękkie utrudnienie)
+      try { ['log','info','warn','error','debug'].forEach(m => (console[m] = () => {})); } catch {}
+    } catch {}
+
+    try {
+      const id = (() => {
+        const s = String(rawId).trim();
+        try {
+          const u = new URL(s);
+          const m = u.pathname.match(/\/presentation\/d\/([\w-]+)/i);
+          return m?.[1] || '';
+        } catch {}
+        return /^[\w-]+$/.test(s) ? s : '';
+      })();
+
+      if (!id) throw new Error('Podaj poprawne ID (parametr ?id=…) lub pełny link Google Slides.');
+
+      // Zbuduj URL-e lokalnie – bez funkcji serverless.
+      const urls = {
+        embedUrl:   `https://docs.google.com/presentation/d/${id}/embed?start=false&loop=false&rm=minimal`,
+        previewUrl: `https://docs.google.com/presentation/d/${id}/preview`,
+        presentUrl: `https://docs.google.com/presentation/d/${id}/present`,
+      };
+
+      // Dobór widoku:
+      // - type=1 -> widok z przyciskami (preview)
+      // - type=2 -> widok bez przycisków (embed z rm=minimal)
+      // - w innym przypadku: użyj parametru mode (preview/present/embed)
+      let chosen;
+      const t = Number(typeParam);
+      if (t === 1) {
+        chosen = urls.previewUrl;
+      } else if (t === 2) {
+        chosen = urls.embedUrl;
+      } else {
+        // Preferuj tryb "preview" jako kompatybilny z iframe; "present" może być zablokowany przez Google.
+        chosen = mode === 'present' ? urls.presentUrl
+               : mode === 'embed'   ? urls.embedUrl
+               : urls.previewUrl;
+      }
+
+      const iframe = document.createElement('iframe');
+      iframe.allowFullscreen = true;
+      iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+      iframe.sandbox = 'allow-scripts allow-same-origin allow-presentation';
+      iframe.src = chosen;
+      stage.innerHTML = '';
+      stage.appendChild(iframe);
+    } catch (e) {
+      stage.innerHTML = `
+        <div class="error">
+          <div>
+            <h1>Nie udało się załadować prezentacji</h1>
+            <p>${e.message}</p>
+            <p>Użyj <code>?id=</code> z pełnym linkiem do Slides albo samym ID. Jeśli chcesz wymusić tryb prezentacji, dodaj <code>?mode=present</code> (może wymagać „Opublikuj w internecie”).</p>
+          </div>
+        </div>`;
+      console.error(e);
+    }
+  })();
+  </script>
+</body>
+</html>

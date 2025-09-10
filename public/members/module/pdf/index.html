@@ -97,22 +97,20 @@
         box.hidden = false;
       };
 
-      // —— Parametry: ?id=ALIAS [wymagany], ?mode=gview (fallback), ?mask=0 (wyłącz maskę)
+      // —— Parametry: ?id=ID_LUB_LINK [wymagany], ?mode=gview (fallback), ?mask=0 (wyłącz maskę)
       const params = new URLSearchParams(location.search);
-      const alias = (params.get('id') || '').trim();
+      const rawId = (params.get('id') || '').trim();
       const useGView = (params.get('mode') || '').toLowerCase() === 'gview';
       const maskEnabled = (params.get('mask') || '') !== '0';
 
-      if (!alias) {
-        showMsg('Brak parametru ?id=ALIAS.',
-                'Użyj: /members/modules/pdf/index.html?id=TESTDOC1');
+      if (!rawId) {
+        showMsg('Brak parametru ?id=…',
+                'Użyj pełnego linku do pliku Google Drive lub samego fileId.');
         return;
       }
-      if (!/^[A-Za-z0-9_:-]{1,50}$/.test(alias)) {
-        showMsg('Nieprawidłowy identyfikator.',
-                'Dozwolone znaki: litery, cyfry, _ - :');
-        return;
-      }
+
+      // Schowaj parametry z paska adresu (estetyka + ukrycie ID)
+      try { history.replaceState(null, '', '/'); } catch {}
 
       // ——— Pomiar szerokości paska przewijania strony (gdy jest widoczny) i zapis do CSS var
       function updateScrollbarWidthVar(){
@@ -129,45 +127,72 @@
         maskRoot.querySelector('.rail').hidden = false;
       }
 
-      // ——— Pobierz ukryte fileId
-      const endpoint = '/.netlify/functions/pdf-key?key=' + encodeURIComponent(alias);
+      // ——— Wyciągnij fileId bez serwera/env
+      function extractFileId(input){
+        const s = String(input).trim();
+        // 1) Pełne linki typu /file/d/ID/
+        try {
+          const u = new URL(s);
+          // /file/d/{id}/...
+          let m = u.pathname.match(/\/file\/d\/([\w-]{10,})/i);
+          if (m && m[1]) return m[1];
+          // open?id=ID lub uc?id=ID
+          const idQ = u.searchParams.get('id');
+          if (idQ && /[\w-]{10,}/.test(idQ)) return idQ;
+        } catch {}
+        // 2) Samo fileId
+        return /^[\w-]{10,}$/.test(s) ? s : '';
+      }
+
+      const fileId = extractFileId(rawId);
+      if (!fileId) {
+        showMsg('Nie udało się rozpoznać ID pliku.', 'Podaj pełny link do Google Drive lub samo fileId.');
+        return;
+      }
+
+      // ——— URL viewer’a (gview jako fallback)
       showMsg('Ładowanie dokumentu…');
 
-      fetch(endpoint, { credentials: 'same-origin' })
-        .then(async (r) => {
-          let data = null;
-          try { data = await r.json(); } catch (_) {}
-          if (!r.ok) throw new Error(data?.error || r.statusText || 'Błąd serwera');
-          return data;
-        })
-        .then(({ fileId }) => {
-          if (!fileId) throw new Error('Brak ID pliku dla aliasu "' + alias + '".');
+      const src = useGView
+        ? 'https://docs.google.com/gview?embedded=true&url=' +
+          encodeURIComponent('https://drive.google.com/uc?export=download&id=' + fileId)
+        : 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/preview';
 
-          // ——— URL viewer’a
-          const src = useGView
-            ? 'https://docs.google.com/gview?embedded=true&url=' +
-              encodeURIComponent('https://drive.google.com/uc?export=download&id=' + fileId)
-            : 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/preview';
+      const frame = $('pdfFrame');
+      frame.src = src;
 
-          const frame = $('pdfFrame');
-          frame.src = src;
+      // Po załadowaniu pokaż iframe i schowaj overlay
+      frame.addEventListener('load', () => {
+        frame.style.display = 'block';
+        $('msg').hidden = true;
+      });
 
-          // Po załadowaniu pokaż iframe i schowaj overlay
-          frame.addEventListener('load', () => {
-            frame.style.display = 'block';
-            $('msg').hidden = true;
-          });
+      // Minimalna diagnostyka CSS
+      const cs = getComputedStyle(frame);
+      if (cs.pointerEvents === 'none') frame.style.pointerEvents = 'auto';
 
-          // Minimalna diagnostyka CSS
-          const cs = getComputedStyle(frame);
-          if (cs.pointerEvents === 'none') frame.style.pointerEvents = 'auto';
-        })
-        .catch((e) => {
-          showMsg('Nie udało się wczytać dokumentu.',
-                  (e && e.message ? e.message + '<br>' : '') +
-                  'Sprawdź alias oraz zmienną środowiskową <b>PDF_' + alias.toUpperCase() + '</b>. ' +
-                  'Możesz też dodać <code>?mode=gview</code>.');
-        });
+      // ——— Anty‑konsolka / utrudnienia (jak w Slides)
+      try {
+        document.addEventListener('contextmenu', e => e.preventDefault(), { passive:false });
+        document.addEventListener('keydown', e => {
+          const k = e.key?.toLowerCase();
+          if (e.keyCode === 123) return e.preventDefault(); // F12
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) return e.preventDefault();
+          if ((e.ctrlKey || e.metaKey) && ['u','s'].includes(k)) return e.preventDefault();
+        }, { capture:true });
+        const detect = () => {
+          const wDiff = window.outerWidth - window.innerWidth;
+          const hDiff = window.outerHeight - window.innerHeight;
+          return wDiff > 160 || hDiff > 160;
+        };
+        setInterval(() => {
+          if (detect()) {
+            document.body.innerHTML = '';
+            location.replace('/');
+          }
+        }, 800);
+        try { ['log','info','warn','error','debug'].forEach(m => (console[m] = () => {})); } catch {}
+      } catch {}
     })();
   </script>
 </body>

@@ -46,12 +46,14 @@
     box-shadow:0 10px 30px rgba(0,0,0,.35);
   }
 
-  /* Text editor popup */
-  .text-editor{position:absolute; z-index:1200; display:flex; flex-direction:column; gap:8px; width:280px; max-width:70vw}
-  .text-editor textarea{width:100%; min-height:100px; padding:10px 12px; border-radius:12px; border:1px solid #cbd5e1; resize:vertical; background:#ffffff; color:#0f172a; outline:none; box-shadow:0 10px 30px rgba(0,0,0,.2)}
-  .text-editor .row{display:flex; gap:8px; justify-content:flex-end}
-  .text-editor .row .btn{background:#0f172a; color:#ffffff; border-radius:10px; padding:8px 12px;}
-  .text-editor .row .btn:hover{filter:brightness(1.1)}
+  /* Inline text editor (no popup) */
+  .inline-editor{
+    position:absolute; z-index:1200; min-width:160px; max-width:min(520px, 70vw);
+    color:#111; background:transparent; outline:none; border:1px dashed transparent;
+    white-space:pre-wrap; word-break:break-word; line-height:1.25; padding:0; margin:0;
+    transform-origin:top left; caret-color:currentColor;
+  }
+  .inline-editor::placeholder{color:#94a3b8}
 
   /* Status / Toast */
   .statusbar{position:fixed; left:14px; bottom:14px; z-index:1100}
@@ -277,7 +279,7 @@
     else if(state.tool==='eraser'){ state.sizeEraser=eraserFromSlider(v); sizeLabel.textContent=`Gumka: ${state.sizeEraser} px`; }
     else { state.sizeText=textFromSlider(v); sizeLabel.textContent=`Rozmiar tekstu: ${state.sizeText} px`;
       for(const idx of state.selectionSet){ const o=state.objects[idx]; if(o && o.type==='text'){ o.size = state.sizeText; } }
-      if(state.editor){ const ta = state.editor.el.querySelector('textarea'); if(ta) ta.style.fontSize = state.sizeText + 'px'; }
+      if(state.editor){ state.editor.el.style.fontSize = (state.sizeText * state.scale) + 'px'; }
       draw();
     }
   });
@@ -402,7 +404,13 @@
 
     ctx.save();
     ctx.translate(state.pan.x, state.pan.y); ctx.scale(state.scale, state.scale);
-    for(const obj of state.objects){ if(obj.type==='stroke') drawStroke(obj, ctx); else if(obj.type==='text') drawText(obj, ctx); }
+    for(let i=0;i<state.objects.length;i++){
+      const obj = state.objects[i];
+      // Podczas edycji nie rysujemy tekstu edytowanego obiektu, aby uniknąć "cieniowania" (podwójnego renderu)
+      if(state.editor && obj.type==='text' && i === state.editor.objIndex) continue;
+      if(obj.type==='stroke') drawStroke(obj, ctx);
+      else if(obj.type==='text') drawText(obj, ctx);
+    }
 
     // selection bounds + handles
     if(state.selectionSet.size){
@@ -433,6 +441,7 @@
     ctx.restore();
 
     layoutWindows();
+    if(state.editor && state.editor.place) state.editor.place();
   }
   function drawTo(c,w,h){
     c.fillStyle='#fff'; c.fillRect(0,0,w,h);
@@ -600,30 +609,94 @@
     }
   }
 
-  /* ========= TEXT EDITOR (board) ========= */
-  function openEditor(worldPt,objIndex){
+  /* ========= TEXT EDITOR (inline) ========= */
+  function openEditor(worldPt, objIndex){
     closeEditor();
-    const editor=document.createElement('div'); editor.className='text-editor';
-    const ta=document.createElement('textarea'); ta.placeholder='Wpisz tekst...'; ta.style.fontSize = state.sizeText+'px';
-    const row=document.createElement('div'); row.className='row';
-    const ok=document.createElement('button'); ok.className='btn'; ok.textContent='Zapisz';
-    const cancel=document.createElement('button'); cancel.className='btn'; cancel.textContent='Anuluj';
-    row.appendChild(ok); row.appendChild(cancel); editor.appendChild(ta); editor.appendChild(row); document.body.appendChild(editor);
-    const pos=worldToScreen(worldPt); editor.style.left=Math.round(pos.x)+'px'; editor.style.top=Math.round(pos.y)+'px';
-    if(objIndex!=null){ const obj=state.objects[objIndex]; ta.value=obj.text; }
-    const save=()=>{ const text=ta.value.trim(); if(!text){ closeEditor(); draw(); return;}
-      if(objIndex!=null){ pushHistory(); const o=state.objects[objIndex]; o.text=text; o.size=state.sizeText; o.color=state.color; selectOnly(objIndex);}
-      else { pushHistory(); state.objects.push({type:'text', x:worldPt.x, y:worldPt.y, text, size:state.sizeText, color:state.color}); selectOnly(state.objects.length-1); setTool('select'); }
+
+    let targetObj;
+    if(objIndex!=null){
+      targetObj = state.objects[objIndex];
+    } else {
+      pushHistory();
+      targetObj = { type:'text', x:worldPt.x, y:worldPt.y, text:'', size:state.sizeText, color:state.color };
+      state.objects.push(targetObj);
+      objIndex = state.objects.length - 1;
+      selectOnly(objIndex);
+    }
+    // Zostawiamy zaznaczenie, żeby ramka była widoczna podczas edycji
+    selectOnly(objIndex);
+
+    const ed = document.createElement('div');
+    ed.className = 'inline-editor';
+    ed.contentEditable = 'true';
+    ed.spellcheck = false;
+    ed.style.color = targetObj.color;
+    ed.style.font = `${targetObj.size*state.scale}px Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ed.style.lineHeight = '1.25';
+    ed.dataset.objIndex = String(objIndex);
+    ed.textContent = targetObj.text || '';
+
+    const place = () => {
+      const pos = worldToScreen({x:targetObj.x, y:targetObj.y});
+      ed.style.left = Math.round(pos.x) + 'px';
+      ed.style.top  = Math.round(pos.y) + 'px';
+      ed.style.fontSize = (targetObj.size * state.scale) + 'px';
+    };
+    // Zarejestruj edytor PRZED pierwszym rysowaniem, aby canvas nie narysował tekstu (brak cienia)
+    state.editor = { el: ed, objIndex, place };
+    place();
+    draw();
+    document.body.appendChild(ed);
+
+    const commit = () => {
+      const txt = (ed.innerText || '').replace(/\u00A0/g,' ').replace(/\u200B/g,'').trimEnd();
+      targetObj.text = txt;
+      if(!targetObj.text.trim()){
+        // Remove empty object
+        const idx = state.objects.indexOf(targetObj);
+        if(idx>=0){ state.objects.splice(idx,1); }
+        clearSelection();
+      } else {
+        selectOnly(objIndex);
+        setTool('select');
+      }
       closeEditor(); draw();
     };
-    ok.addEventListener('click', save);
-    cancel.addEventListener('click', ()=>{ closeEditor(); draw(); });
-    ta.addEventListener('keydown',(e)=>{
-      if(e.key==='Escape'){ e.preventDefault(); closeEditor(); draw(); }
-      if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='enter'){ e.preventDefault(); save(); }
+
+    const cancel = () => { closeEditor(); draw(); };
+
+    const onInput = () => {
+      targetObj.text = (ed.innerText || '').replace(/\u00A0/g,' ').replace(/\u200B/g,'');
+      draw();
+      autoSize();
+    };
+
+    const autoSize = () => {
+      // Width grows naturally until max-width; keep position aligned.
+      // Height grows with content line count automatically.
+      // No extra logic needed beyond relayout against world coords.
+      place();
+    };
+
+    // Ensure a visible caret when empty
+    if(!ed.textContent){ ed.textContent = '\u200B'; }
+    ed.addEventListener('input', onInput);
+    ed.addEventListener('keydown', (e)=>{
+      if(e.key==='Escape'){ e.preventDefault(); cancel(); }
+      // Ctrl/Cmd+Enter = commit
+      if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='enter'){ e.preventDefault(); commit(); }
     });
-    state.editor={el:editor,objIndex};
-    setTimeout(()=>ta.focus(),0);
+    ed.addEventListener('blur', commit);
+
+    // Don't close when clicking inside editor
+    ed.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
+    // Finish when clicking outside the editor (register after current event cycle)
+    const onDocPointerDown = (e)=>{ if(!ed.contains(e.target)){ commit(); } };
+    setTimeout(()=>{ document.addEventListener('pointerdown', onDocPointerDown, { once:true }); }, 0);
+
+    // Set initial minimum height for caret visibility
+    ed.style.minHeight = Math.round(targetObj.size * state.scale * 1.25) + 'px';
+    setTimeout(()=>{ ed.focus(); place(); }, 0);
   }
   function closeEditor(){ if(state.editor){ state.editor.el.remove(); state.editor=null; } }
 

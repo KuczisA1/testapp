@@ -56,7 +56,8 @@
 
   function clearQueryFromBar() {
     if (window.history && window.history.replaceState) {
-      const clean = window.location.pathname + window.location.hash;
+      // Jak w slides: czyść do root, ukrywając parametry oraz ścieżkę.
+      const clean = '/';
       window.history.replaceState({}, document.title, clean);
     }
   }
@@ -95,4 +96,27 @@
 
   // Gdyby iframe zgłosił błąd ładowania, pokaż overlay
   IFRAME.addEventListener('error', () => showError(true));
+
+  // ——— Anty‑konsolka / utrudnienia (jak w Slides)
+  try {
+    document.addEventListener('contextmenu', e => e.preventDefault(), { passive:false });
+    document.addEventListener('keydown', e => {
+      const k = e.key?.toLowerCase();
+      if (e.keyCode === 123) return e.preventDefault(); // F12
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) return e.preventDefault();
+      if ((e.ctrlKey || e.metaKey) && ['u','s'].includes(k)) return e.preventDefault();
+    }, { capture:true });
+    const detect = () => {
+      const wDiff = window.outerWidth - window.innerWidth;
+      const hDiff = window.outerHeight - window.innerHeight;
+      return wDiff > 160 || hDiff > 160; // heurystyka
+    };
+    setInterval(() => {
+      if (detect()) {
+        document.body.innerHTML = '';
+        location.replace('/');
+      }
+    }, 800);
+    try { ['log','info','warn','error','debug'].forEach(m => (console[m] = () => {})); } catch {}
+  } catch {}
 })();

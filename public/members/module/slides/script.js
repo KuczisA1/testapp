@@ -1,22 +1,24 @@
 // netlify/functions/slides-key.js
 exports.handler = async (event) => {
   try {
-    const idKey = (event.queryStringParameters?.id || '').trim();
-    const ui = (event.queryStringParameters?.ui || 'embed').trim().toLowerCase();
-    const envName = idKey ? `SLIDES_${idKey.toUpperCase()}` : 'SLIDES_ID';
+    if (event.httpMethod && event.httpMethod !== 'GET') {
+      return json(405, { error: 'Method Not Allowed' });
+    }
 
-    const raw = process.env[envName];
-    if (!raw) return json(404, { error: `Brak zmiennej środowiskowej: ${envName}` });
+    const qp = event.queryStringParameters || {};
+    const rawId = (qp.id || '').trim();
+    // Wspieraj oba klucze: "mode" (nowe) i "ui" (wsteczna kompatybilność)
+    const mode = ((qp.mode ?? qp.ui ?? 'embed') + '').trim().toLowerCase();
 
-    const id = extractId(raw);
-    if (!id)   return json(400, { error: 'Nie udało się wyciągnąć ID prezentacji.' });
+    const id = extractId(rawId);
+    if (!id) return json(400, { error: 'Podaj poprawne ID prezentacji w ?id=… (może być pełny link lub samo ID).' });
 
     const urls = buildUrls(id);
-    const chosen = ui === 'present' ? urls.presentUrl
-                  : ui === 'preview' ? urls.previewUrl
+    const chosen = mode === 'present' ? urls.presentUrl
+                  : mode === 'preview' ? urls.previewUrl
                   : urls.embedUrl;
 
-    return json(200, { key: idKey || 'DEFAULT', mode: ui, url: chosen, ...urls });
+    return json(200, { id, mode, url: chosen, ...urls });
   } catch (err) {
     console.error(err);
     return json(500, { error: 'Błąd serwera funkcji.' });
