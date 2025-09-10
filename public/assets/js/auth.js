@@ -190,6 +190,13 @@
   function getLocalLastSignIn()   { return Number(localStorage.getItem('cd_last_sign_in') || 0); }
   function setLocalLastSignIn(ts) { if (Number.isFinite(ts) && ts > 0) localStorage.setItem('cd_last_sign_in', String(ts)); }
 
+  function toTs(x){
+    if (!x) return 0;
+    if (typeof x === 'number') return x;
+    const t = Date.parse(String(x));
+    return Number.isFinite(t) ? t : 0;
+  }
+
   async function fetchRemoteUser(token) {
     const res = await fetch('/.netlify/identity/user', {
       headers: { Authorization: `Bearer ${token}` }
@@ -208,7 +215,7 @@
       const data  = await fetchRemoteUser(token);
       const ver   = data && data.user_metadata && data.user_metadata.current_session;
       if (ver) setLocalSessionVer(ver);
-      const ls  = Date.parse((data && (data.last_sign_in_at || data.updated_at)) || '') || 0;
+      const ls  = toTs((data && (data.last_login || data.last_sign_in_at || data.updated_at || data.confirmed_at || data.created_at)) || 0);
       if (ls) setLocalLastSignIn(ls);
     } catch {}
   }
@@ -222,7 +229,7 @@
       const data  = await fetchRemoteUser(token);
       const serverVer = data && data.user_metadata && data.user_metadata.current_session;
       const localVer  = getLocalSessionVer();
-      const serverLS  = Date.parse((data && (data.last_sign_in_at || data.updated_at)) || '') || 0;
+      const serverLS  = toTs((data && (data.last_login || data.last_sign_in_at || data.updated_at || data.confirmed_at || data.created_at)) || 0);
       const localLS   = getLocalLastSignIn();
       const sessionMismatch = !!(serverVer && localVer && serverVer !== localVer);
       const signInMoved    = !!(serverLS && localLS && serverLS > localLS);
