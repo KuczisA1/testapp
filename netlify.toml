@@ -50,19 +50,11 @@
   status = 401
   force  = true
 
-# --- DASHBOARD: pending/active/admin ---
+# --- DASHBOARD: serwuj zawsze stronę; klient zrobi guard do /login/ ---
 [[redirects]]
   from = "/dashboard.html"
   to   = "/dashboard.html"
   status = 200
-  force  = true
-  conditions = { Role = ["pending", "active", "admin"] }
-
-# Niezalogowanych kierujemy na /login/ (unikamy /)
-[[redirects]]
-  from = "/dashboard.html"
-  to   = "/login/?from=/dashboard.html"
-  status = 302
   force  = true
 
 # Kanoniczny adres dashboardu
