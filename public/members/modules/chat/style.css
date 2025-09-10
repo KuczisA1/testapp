@@ -1,0 +1,404 @@
+/* =========================
+   ChemDisk – modern UI (Chat-only)
+   ========================= */
+
+/* ---- Design tokens ---- */
+:root{
+  --bg: #f7f8fb;
+  --surface: #ffffff;
+  --elev-1: #f2f4f8;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: rgba(15,23,42,0.08);
+
+  --primary: #3b82f6;
+  --primary-weak: rgba(59,130,246,0.12);
+
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --shadow-sm: 0 1px 2px rgba(2,6,23,0.05);
+  --shadow-md: 0 6px 20px rgba(2,6,23,0.08);
+
+  --control-h: 52px;
+  --chip-h: 42px;
+}
+
+body.dark, [data-theme="dark"]{
+  --bg: #0b0f14;
+  --surface: #0f1520;
+  --elev-1: #0b1220;
+  --text: #e6e8ea;
+  --muted: #9aa3b2;
+  --border: rgba(255,255,255,0.09);
+
+  --primary: #7aa2ff;
+  --primary-weak: rgba(122,162,255,0.16);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+/* ---- Base ---- */
+*{ box-sizing: border-box; }
+html, body{ height:100%; }
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans";
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-size: 17px; /* czytelniejsze, także na mobile */
+}
+
+[hidden]{ display:none !important; }
+
+.material-symbols-rounded{
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 32;
+  font-size: 20px;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+}
+
+/* Links & buttons reset */
+button{
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+button:disabled{ opacity: .6; cursor: not-allowed; }
+a{ color: inherit; text-decoration: none; }
+
+/* ---- Layout container ---- */
+.container{
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px 16px calc(220px + env(safe-area-inset-bottom)); /* miejsce na dok z inputem */
+  min-height: 100svh;
+  position: relative;
+}
+
+/* ---- Header & brand ---- */
+.app-header{
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  background: linear-gradient(to bottom, color-mix(in hsl, var(--bg), transparent 20%), transparent);
+  backdrop-filter: blur(6px);
+}
+
+.brand{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.logo{
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.titles .heading{
+  margin: 0;
+  font-size: clamp(20px, 2.2vw, 24px);
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+.titles .sub-heading{
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* ---- Mode bar (chips) ---- */
+.mode-bar{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip{
+  height: var(--chip-h);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  background: color-mix(in hsl, var(--surface), var(--bg) 25%);
+  border: 1px solid var(--border);
+  transition: transform .06s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
+  box-shadow: var(--shadow-sm);
+}
+.chip:hover{ transform: translateY(-1px); }
+.chip:focus-visible{
+  outline: 2px solid color-mix(in oklab, var(--primary), transparent 60%);
+  outline-offset: 2px;
+}
+.chip.selected{
+  background: var(--primary-weak);
+  border-color: color-mix(in oklab, var(--primary), #000 0%);
+  color: var(--primary);
+}
+
+/* ---- Suggestions grid ---- */
+.suggestions{
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 26px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.suggestions-item{
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px 48px;
+  min-height: 110px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .2s ease, transform .06s ease, border-color .2s ease;
+  overflow: hidden;
+}
+.suggestions-item .text{ margin: 0; color: var(--muted); }
+.suggestions-item .icon{
+  position: absolute;
+  right: 10px; bottom: 10px;
+  opacity: .6;
+  font-size: 22px;
+}
+.suggestions-item:hover{
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--border), var(--primary) 35%);
+  box-shadow: var(--shadow-md);
+}
+
+/* ---- Chats area ---- */
+.chats-container{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 6px 0 24px;
+  min-height: 28vh;
+}
+.chat, .message{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Prompt (fixed dock) ---- */
+.prompt-container{
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 20;
+  background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--bg), #000 4%));
+  padding: 12px 8px calc(18px + env(safe-area-inset-bottom));
+}
+
+.prompt-wrapper{
+  max-width: 1000px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.prompt-form{
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 8px;
+  box-shadow: var(--shadow-md);
+}
+
+.prompt-input{
+  height: var(--control-h);
+  border: 0;
+  border-radius: 12px;
+  padding: 0 14px;
+  background: var(--elev-1);
+  color: var(--text);
+  outline: none;
+}
+.prompt-input::placeholder{ color: color-mix(in oklab, var(--muted), transparent 20%); }
+
+.prompt-actions{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-upload-wrapper{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+}
+.file-preview{
+  width: 34px; height: 34px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--elev-1);
+  display: inline-block;
+}
+.file-preview[src=""], .file-preview:not([src]){ display:none; }
+
+.file-icon,
+#cancel-file-btn,
+#add-file-btn,
+#stop-response-btn,
+#send-prompt-btn,
+#theme-toggle-btn,
+#delete-chats-btn{
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--surface), var(--bg) 10%);
+  border: 1px solid var(--border);
+  transition: transform .06s ease, background .2s ease, border-color .2s ease;
+}
+#send-prompt-btn{
+  background: var(--primary);
+  color: #fff;
+  border-color: color-mix(in oklab, var(--primary), #000 10%);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--primary), transparent 70%);
+}
+#send-prompt-btn:hover{ transform: translateY(-1px); }
+.file-icon:hover,
+#cancel-file-btn:hover,
+#add-file-btn:hover,
+#stop-response-btn:hover,
+#theme-toggle-btn:hover,
+#delete-chats-btn:hover{
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--border), var(--primary) 40%);
+}
+
+#theme-toggle-btn,
+#delete-chats-btn{
+  grid-column: span 1;
+}
+
+/* Disclaimer */
+.disclaimer-text{
+  max-width: 1000px;
+  margin: 8px auto 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---- Markdown w odpowiedziach asystenta ---- */
+.message .md {
+  line-height: 1.65;
+  font-size: 1rem;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.message .md h1,
+.message .md h2,
+.message .md h3,
+.message .md h4,
+.message .md h5,
+.message .md h6 {
+  margin: .6em 0 .4em;
+  line-height: 1.3;
+}
+
+.message .md p { margin: .4em 0 .8em; }
+
+.message .md ul,
+.message .md ol {
+  margin: .4em 0 .8em;
+  padding-left: 1.2rem;
+}
+
+.message .md li { margin: .25em 0; }
+
+.message .md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: .95em;
+  background: var(--elev-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 .35em;
+}
+
+.message .md pre {
+  background: var(--elev-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: .6em 0 .9em;
+}
+.message .md pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  white-space: pre;
+}
+
+/* Podświetlenie strefy drag&drop w formularzu */
+.prompt-form.drag-over{
+  outline: 2px dashed color-mix(in oklab, var(--primary), transparent 45%);
+  outline-offset: 4px;
+}
+
+/* ---- Responsive tweaks ---- */
+@media (max-width: 680px){
+  .prompt-wrapper{
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .prompt-form{
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px){
+  body{ font-size: 17.5px; }
+  .prompt-container{ padding-bottom: calc(22px + env(safe-area-inset-bottom)); }
+  .prompt-input{ min-height: 56px; }
+}
+
+/* Scrollbary */
+*{
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted), transparent 40%) transparent;
+}
+*::-webkit-scrollbar{ height: 10px; width: 10px; }
+*::-webkit-scrollbar-thumb{
+  background: color-mix(in oklab, var(--muted), transparent 40%);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track{ background: transparent; }

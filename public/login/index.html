@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Logowanie – Aplikacja</title>
+  <link rel="stylesheet" href="./style.css" />
+  <!-- Widget Identity (dla sesji i eventów) -->
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <!-- Spójna logika sesji/nawigacji -->
+  <script defer src="/assets/js/auth.js"></script>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="tabs" role="tablist" aria-label="Formularze uwierzytelniania">
+      <button class="tab-btn active" data-tab="login" role="tab" aria-selected="true">Zaloguj się</button>
+      <button class="tab-btn" data-tab="register" role="tab" aria-selected="false">Stwórz użytkownika</button>
+    </div>
+
+    <div id="flash" class="flash" aria-live="polite"></div>
+
+    <!-- Logowanie -->
+    <form id="login-form" class="form active" autocomplete="on" novalidate>
+      <h2>Logowanie</h2>
+      <div class="input-field">
+        <input type="email" id="login-email" required autocomplete="email" />
+        <label for="login-email">Email</label>
+      </div>
+      <div class="input-field">
+        <input type="password" id="login-password" required autocomplete="current-password" />
+        <label for="login-password">Hasło</label>
+      </div>
+      <button id="login-submit" type="submit">Zaloguj się</button>
+      <p class="helper">Zapomniałeś hasła? <a id="recover-link" href="#">Odzyskaj dostęp</a></p>
+    </form>
+
+    <!-- Rejestracja -->
+    <form id="register-form" class="form" autocomplete="on" novalidate>
+      <h2>Rejestracja</h2>
+      <div class="input-field">
+        <input type="text" id="register-name" required autocomplete="given-name" />
+        <label for="register-name">Imię</label>
+      </div>
+      <div class="input-field">
+        <input type="email" id="register-email" required autocomplete="email" />
+        <label for="register-email">Email</label>
+      </div>
+      <div class="input-field">
+        <input type="password" id="register-password" required autocomplete="new-password" />
+        <label for="register-password">Hasło</label>
+      </div>
+      <button id="register-submit" type="submit">Stwórz konto</button>
+      <p class="helper">Po rejestracji możesz potrzebować potwierdzić email – sprawdź skrzynkę.</p>
+    </form>
+  </div>
+
+  <script>
+    // UI helpers
+    const flash = (msg, type = "") => {
+      const box = document.getElementById("flash");
+      box.textContent = msg || "";
+      box.className = `flash ${type}`;
+    };
+    const setBusy = (btn, busy, label) => {
+      if (!btn) return;
+      if (!btn.dataset.label && label) btn.dataset.label = label;
+      btn.disabled = !!busy;
+      btn.dataset.busy = busy ? "1" : "0";
+      if (btn.dataset.label) btn.textContent = busy ? "Przetwarzam..." : btn.dataset.label;
+    };
+
+    // Tabs
+    const tabBtns = document.querySelectorAll(".tab-btn");
+    const forms = document.querySelectorAll(".form");
+    tabBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        tabBtns.forEach(b => { b.classList.remove("active"); b.setAttribute("aria-selected", "false"); });
+        forms.forEach(f => f.classList.remove("active"));
+        btn.classList.add("active");
+        btn.setAttribute("aria-selected", "true");
+        document.getElementById(btn.dataset.tab + "-form").classList.add("active");
+        flash(""); // czyść komunikaty
+      });
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // Logowanie (bez popupa)
+      const loginBtn = document.getElementById("login-submit");
+      loginBtn.dataset.label = "Zaloguj się";
+      document.getElementById("login-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        flash("");
+        const email = document.getElementById("login-email").value.trim();
+        const password = document.getElementById("login-password").value;
+        if (!email || !password) return flash("Uzupełnij email i hasło.", "warn");
+
+        try {
+          setBusy(loginBtn, true);
+          await netlifyIdentity.gotrue.login(email, password, true);
+          try { await netlifyIdentity.refresh(); } catch {}
+          flash("Zalogowano. Przenoszę na dashboard...", "success");
+          // auth.js zajmie się przekierowaniem
+          setTimeout(() => { window.location.replace("/dashboard.html"); }, 250);
+        } catch (err) {
+          flash("Błąd logowania: " + (err?.message || err), "error");
+        } finally {
+          setBusy(loginBtn, false);
+        }
+      });
+
+      // Rejestracja (bez popupa)
+      const regBtn = document.getElementById("register-submit");
+      regBtn.dataset.label = "Stwórz konto";
+      document.getElementById("register-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        flash("");
+        const name = document.getElementById("register-name").value.trim();
+        const email = document.getElementById("register-email").value.trim();
+        const password = document.getElementById("register-password").value;
+        if (!name || !email || !password) return flash("Uzupełnij imię, email i hasło.", "warn");
+
+        try {
+          setBusy(regBtn, true);
+          await netlifyIdentity.gotrue.signup(email, password, { full_name: name, name });
+          flash("Konto utworzone. Sprawdź email, aby potwierdzić konto.", "success");
+
+          // Jeśli nie używasz weryfikacji email, można zalogować od razu:
+          try {
+            await netlifyIdentity.gotrue.login(email, password, true);
+            try { await netlifyIdentity.refresh(); } catch {}
+            // auth.js zajmie się przekierowaniem
+            setTimeout(() => { window.location.replace("/dashboard.html"); }, 250);
+          } catch {}
+        } catch (err) {
+          flash("Nie udało się utworzyć konta: " + (err?.message || err), "error");
+        } finally {
+          setBusy(regBtn, false);
+        }
+      });
+
+      // Reset hasła
+      document.getElementById("recover-link").addEventListener("click", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("login-email").value.trim();
+        if (!email) return flash("Podaj najpierw email w polu logowania.", "warn");
+        try {
+          await netlifyIdentity.gotrue.requestPasswordRecovery(email);
+          flash("Wysłano link do resetu hasła. Sprawdź skrzynkę.", "success");
+        } catch (err) {
+          flash("Nie udało się wysłać linku: " + (err?.message || err), "error");
+        }
+      });
+    });
+  </script>
+</body>
+</html>

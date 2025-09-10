@@ -1,18 +1,111 @@
 [build]
+  publish   = "public"
   functions = "netlify/functions"
 
-# Obsługa SPA w folderze members (render z funkcji po stronie klienta)
+# --- API NA GÓRZE ---
 [[redirects]]
-  from = "/members"
-  to = "/members/"
+  from = "/api/chat"
+  to   = "/.netlify/functions/chat"
+  status = 200
+  force  = true
+
+# --- HTTPS ---
+[[redirects]]
+  from = "http://*"
+  to   = "https://:splat"
   status = 301
+  force  = true
 
-# Opcjonalnie można dodać proxy do funkcji, ale w tej wersji
-# wywołujemy funkcję z JS z nagłówkiem Authorization.
+# --- LOGIN: publiczny obszar (SPA-friendly) ---
+[[redirects]]
+  from = "/login/*"
+  to   = "/login/:splat"
+  status = 200
+  force  = true
 
-# Strona 404 dla wszystkich nieznanych ścieżek
+# --- MEMBERS: tylko active/admin ---
+[[redirects]]
+  from = "/members/*"
+  to   = "/members/:splat"
+  status = 200
+  force  = true
+  conditions = { Role = ["active", "admin"] }
+
+[[redirects]]
+  from = "/members/*"
+  to   = "/unauthorized.html"
+  status = 401
+  force  = true
+
+# --- DASHBOARD: pending/active/admin ---
+[[redirects]]
+  from = "/dashboard.html"
+  to   = "/dashboard.html"
+  status = 200
+  force  = true
+  conditions = { Role = ["pending", "active", "admin"] }
+
+# Niezalogowanych kierujemy na /login/ (unikamy /)
+[[redirects]]
+  from = "/dashboard.html"
+  to   = "/login/?from=/dashboard.html"
+  status = 302
+  force  = true
+
+# Kanoniczny adres dashboardu
+[[redirects]]
+  from = "/dashboard"
+  to   = "/dashboard.html"
+  status = 301
+  force  = true
+
+[[redirects]]
+  from = "/dashboard/"
+  to   = "/dashboard.html"
+  status = 301
+  force  = true
+
+# --- Nagłówki ---
+[[headers]]
+  for = "/members/*"
+  [headers.values]
+    Cache-Control = "private, no-store, no-cache, must-revalidate"
+
+[[headers]]
+  for = "/dashboard.html"
+  [headers.values]
+    Cache-Control = "private, no-store, no-cache, must-revalidate"
+
+[[headers]]
+  for = "/members/modules/yt/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' https://i.ytimg.com data:; style-src 'self' 'unsafe-inline'; media-src https://*.googlevideo.com"
+
+[dev]
+  publish   = "public"
+  functions = "netlify/functions"
+
+# --- Brak cache i twardsze nagłówki dla strony z iframe
+[[headers]]
+  for = "/slides.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=(), usb=(), payment=()"
+    # CSP nie blokuje treści wewnątrz iframu (to inny origin), ale ogranicza naszą stronę:
+    Content-Security-Policy = "default-src 'none'; frame-src https://docs.google.com https://drive.google.com; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+
+# --- Brak cache także dla samej funkcji
+[[headers]]
+  for = "/members/modules/slides/*"
+  [headers.values]
+    Cache-Control = "no-store"
+
+# --- Fallback 404 dla pozostałych ścieżek ---
 [[redirects]]
   from = "/*"
-  to = "/404.html"
+  to   = "/404.html"
   status = 404
-
