@@ -132,9 +132,11 @@
       updateAuthLinks(user);
       if (!user) return;
 
+      // Uzyskaj świeży token i pełne dane użytkownika (żeby mieć aktualne role)
       user = await refreshUser(user);
       rememberUser(user);
-      try { setJwtCookie(await user.jwt()); } catch {}
+      let token = null;
+      try { token = await user.jwt(true); setJwtCookie(token); } catch {}
       updateAuthLinks(user);
 
       const emailEl = $('user-email');
@@ -145,13 +147,19 @@
 
       if (emailEl) emailEl.textContent = user.email || '—';
 
-      const { displayName, username } = deriveNames(user);
+      // Pobierz świeże role/nazwy z Identity API
+      let fresh = null;
+      try { if (token) fresh = await fetchRemoteUser(token); } catch {}
+      const roles = (fresh && fresh.app_metadata && Array.isArray(fresh.app_metadata.roles))
+        ? fresh.app_metadata.roles
+        : ((user.app_metadata && Array.isArray(user.app_metadata.roles)) ? user.app_metadata.roles : []);
+
+      const namesProxy = fresh ? { user_metadata: fresh.user_metadata, email: fresh.email } : user;
+      const { displayName, username } = deriveNames(namesProxy);
       document.querySelectorAll('.js-username').forEach(el => { el.textContent = username || '—'; });
 
       if (nameEl)  nameEl.textContent  = displayName || '—';
       if (unameEl) unameEl.textContent = username || '—';
-
-      const roles = (user.app_metadata && user.app_metadata.roles) || [];
       const status = statusFromRoles(roles);
 
       if (statusEl) statusEl.textContent = status;
@@ -320,6 +328,7 @@
         const ok = await ensureFreshJwtCookieOrLogout();
         if (!ok) { await runGuard(); return; }
         await seedSessionVersion();
+        try { await window.netlifyIdentity.refresh(); } catch {}
       } else {
         clearJwtCookie();
         clearLocalSessionVer();

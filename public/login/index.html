@@ -76,15 +76,16 @@
       document.cookie = `nf_jwt=${token}; Path=/;${secure} SameSite=Lax; Max-Age=3600`;
     };
 
-    // Ustaw/odśwież znacznik sesji (single-device) po zalogowaniu
-    async function stampCurrentSession(user){
+    // Zsynchronizuj wersję sesji (single-device) z serwera po zalogowaniu
+    async function syncSessionVersionAfterLogin(user){
       try{
-        if (!user) return;
-        const sid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
-        await user.update({ data: { current_session: sid } });
-        try { await user.jwt(true); } catch {}
-        // lokalny cache do szybkiego porównania po odświeżeniu
-        try { localStorage.setItem('cd_session_ver', sid); } catch {}
+        const token = await (user && user.jwt ? user.jwt(true) : netlifyIdentity.currentUser().jwt(true));
+        const res = await fetch('/.netlify/identity/user', { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          const ver = data && data.user_metadata && data.user_metadata.current_session;
+          if (ver) try { localStorage.setItem('cd_session_ver', ver); } catch {}
+        }
       }catch{}
     }
 
@@ -130,8 +131,8 @@
           const user = await netlifyIdentity.gotrue.login(email, password, true);
           try { await netlifyIdentity.refresh(); } catch {}
           try { const t = await user.jwt(); setJwtCookie(t); } catch {}
-          // Zaktualizuj znacznik sesji dla single-device
-          try { await stampCurrentSession(user); } catch {}
+          // Zsynchronizuj wersję sesji z serwera (bez nadpisywania)
+          try { await syncSessionVersionAfterLogin(user); } catch {}
           flash("Zalogowano. Przenoszę na dashboard...", "success");
           window.location.replace("/dashboard.html");
         } catch (err) {
@@ -168,7 +169,7 @@
             const u = await netlifyIdentity.gotrue.login(email, password, true);
             try { await netlifyIdentity.refresh(); } catch {}
             try { const t = await u.jwt(); setJwtCookie(t); } catch {}
-            try { await stampCurrentSession(u); } catch {}
+            try { await syncSessionVersionAfterLogin(u); } catch {}
             window.location.replace("/dashboard.html");
           } catch {}
         } catch (err) {
