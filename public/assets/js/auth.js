@@ -273,8 +273,9 @@
         safeGo(`${norm(PATHS.loginBase)}/`);
         return;
       }
-      // Uruchom/odśwież licznik sesji 5h
-      startFiveHourTimerIfPossible();
+      // Sprawdź konflikt sesji (inne urządzenie)
+      const conflicted = await checkSessionMismatchOnce();
+      if (conflicted) return;
       await paintUser();
       return;
     }
@@ -345,11 +346,6 @@
       const ok = await ensureFreshJwtCookieOrLogout();
       if (!ok) return;
       await seedSessionVersion();
-      if (stopSessionWatcher) stopSessionWatcher();
-      stopSessionWatcher = startSessionWatcher();
-      // licznik sesji 5h + globalny poller
-      startFiveHourTimerIfPossible();
-      startExpiryPoller();
       safeGo(PATHS.dashboard);
     });
 
@@ -358,9 +354,6 @@
       clearJwtCookie();
       clearLocalSessionVer();
       clearRememberedUser();
-      if (stopSessionWatcher) { stopSessionWatcher(); stopSessionWatcher = null; }
-      if (stopSessionTimer) { stopSessionTimer(); stopSessionTimer = null; }
-      if (stopExpiryPoller) { stopExpiryPoller(); stopExpiryPoller = null; }
       safeGo(PATHS.home[0]); // '/'
     });
 

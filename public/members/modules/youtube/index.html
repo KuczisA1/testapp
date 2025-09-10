@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChemDisk – YouTube (nowy odtwarzacz)</title>
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <link rel="stylesheet" href="./styles.css" />
+
+  <!-- Netlify Identity + wspólny auth (świeże nf_jwt, single-device, guardy) -->
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <script defer src="/assets/js/auth.js"></script>
+
+  <!-- Nasz player -->
+  <script defer src="./script.js"></script>
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api" referrerpolicy="strict-origin-when-cross-origin"></script>
+</head>
+<body>
+  <main class="stage">
+    <div id="playerShell" class="player-shell">
+      <div id="player" class="player" aria-hidden="true"></div>
+      <button id="overlayBtn" class="overlay" aria-label="Rozpocznij odtwarzanie">Kliknij, aby rozpocząć</button>
+
+      <div id="controls" class="controls" role="group" aria-label="Kontrolki odtwarzacza">
+        <button id="playPause" class="btn" title="Odtwórz / Pauza">▶︎/⏸</button>
+        <span id="timeNow" class="time">0:00</span>
+        <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Przewijanie" />
+        <span id="timeDur" class="time">0:00</span>
+        <button id="mute" class="btn" title="Wycisz / Włącz dźwięk">🔇/🔊</button>
+        <select id="rate" title="Prędkość">
+          <option value="0.75">0.75×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.25">1.25×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+        <button id="fs" class="btn" title="Pełny ekran">⤢</button>
+      </div>
+    </div>
+
+    <div id="msg" class="msg" role="status" aria-live="polite"></div>
+  </main>
+</body>
+</html>
+

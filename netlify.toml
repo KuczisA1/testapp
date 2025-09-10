@@ -113,6 +113,11 @@
   [headers.values]
     Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com https://identity.netlify.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://identity.netlify.com; connect-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://identity.netlify.com; img-src 'self' https://i.ytimg.com data:; style-src 'self' 'unsafe-inline'; media-src https://*.googlevideo.com"
 
+[[headers]]
+  for = "/members/modules/youtube/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com https://identity.netlify.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://identity.netlify.com; connect-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://identity.netlify.com; img-src 'self' https://i.ytimg.com data:; style-src 'self' 'unsafe-inline'; media-src https://*.googlevideo.com"
+
 [dev]
   publish   = "public"
   functions = "netlify/functions"

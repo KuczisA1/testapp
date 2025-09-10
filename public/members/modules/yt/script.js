@@ -16,7 +16,7 @@ const state = {
   domReady:false, apiReady:false, confReady:false,
   player:null, ticker:null, dragging:false, loadedOnce:false,
   videoId:null, key:null, elements:{}, hideTimer:null,
-  host: 'https://www.youtube-nocookie.com', // prefer privacy-enhanced
+  host: 'https://www.youtube.com', // default to standard host for reliability
   triedFallback: false,
   stallTimer: null
 };
@@ -294,9 +294,9 @@ function startOrToggle(){
       state.stallTimer = setTimeout(() => {
         try {
           const st = state.player.getPlayerState();
-          if (st === YT.PlayerState.UNSTARTED && !state.triedFallback && state.host !== 'https://www.youtube.com') {
+          if (st === YT.PlayerState.UNSTARTED && !state.triedFallback && state.host !== 'https://www.youtube-nocookie.com') {
             state.triedFallback = true;
-            tryFallbackHost('https://www.youtube.com');
+            tryFallbackHost('https://www.youtube-nocookie.com');
           }
         } catch {}
       }, 4000);
@@ -323,7 +323,7 @@ function tryFallbackHost(host){
     state.player = null;
     state.host = host;
     state.loadedOnce = false;
-    setMsg('Przełączam tryb odtwarzacza...');
+    setMsg('');
     maybeInit();
     whenReady(() => {
       try {
