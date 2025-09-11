@@ -29,6 +29,55 @@
       background: #000;
     }
 
+    /* Iframe BEZ sandboxa – używany dla type=3 */
+    #pdfFree{
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      border: 0; display: none;
+      z-index: 1;
+      pointer-events: auto !important;
+      background: #000;
+    }
+
+    /* Embed z natywnym viewerem przeglądarki (type=2) */
+    #pdfEmbed{
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      border: 0; display: none;
+      z-index: 1;
+      pointer-events: auto !important;
+      background: #000;
+    }
+
+    /* Object – alternatywny natywny viewer PDF (type=3) */
+    #pdfObject{
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      border: 0; display: none;
+      z-index: 1;
+      pointer-events: auto !important;
+      background: #000;
+    }
+
+    /* Drobne poprawki dla trybu 1: pełny viewport i brak nakładki paska przewijania strony */
+    .type1 #pdfFrame{ width: 100vw; height: 100vh; }
+    .hide-scrollbar{ scrollbar-width: none; }
+    .hide-scrollbar::-webkit-scrollbar{ width:0; height:0; }
+
+    /* Pasek narzędzi (drukuj/pobierz) pokazywany dla type=3 */
+    #topBar{
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 48px; padding: 8px 12px; gap: 8px;
+      display: none; align-items: center; justify-content: flex-end;
+      z-index: 4; /* ponad maską (3) i viewerem (1) */
+      background: linear-gradient(180deg, rgba(10,10,12,.92), rgba(10,10,12,.65));
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+    }
+    #topBar .btn{
+      appearance: none; border: 0; border-radius: 8px;
+      padding: 8px 12px; font: 14px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color: #eaeaea; background: #1a1b1f; cursor: pointer; opacity: .95;
+    }
+    #topBar .btn:hover{ opacity: 1; background: #24262b; }
+
     /* Overlay z komunikatami (lekki) */
     #msg{
       position: fixed; inset: 0; z-index: 2;
@@ -76,6 +125,26 @@
           referrerpolicy="strict-origin-when-cross-origin"
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-pointer-lock"></iframe>
 
+  <!-- Iframe bez sandboxa dla trybu 3 -->
+  <iframe id="pdfFree"
+          title="Podgląd PDF (bez sandbox)"
+          allowfullscreen
+          webkitallowfullscreen
+          mozallowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"></iframe>
+
+  <!-- Wariant 2: natywny viewer PDF w przeglądarce (z toolbar/drukuj/pobierz) -->
+  <embed id="pdfEmbed" type="application/pdf" />
+
+  <!-- Wariant 3: alternatywny embed przez <object> (również natywny toolbar) -->
+  <object id="pdfObject" type="application/pdf" data="" aria-label="Podgląd PDF"></object>
+
+  <!-- Pasek narzędzi dla trybu 3 -->
+  <div id="topBar" aria-hidden="true">
+    <a id="dlBtn" class="btn" href="#" download>⬇ Pobierz</a>
+    <button id="printBtn" class="btn" type="button">🖨 Drukuj</button>
+  </div>
+
   <!-- Maska anty-popout (domyślnie: WŁĄCZONA; wyłącz ?mask=0) -->
   <div id="maskRoot" hidden aria-hidden="true">
     <div class="rail" hidden></div>
@@ -95,11 +164,12 @@
         box.hidden = false;
       };
 
-      // —— Parametry: ?id=ID_LUB_LINK [wymagany], ?mode=gview (fallback), ?mask=0 (wyłącz maskę)
+      // —— Parametry: ?id=ID_LUB_LINK [wymagany], ?mode=gview (fallback), ?mask=0 (wyłącz maskę), ?type=1|2|3 (typ viewera)
       const params = new URLSearchParams(location.search);
       const rawId = (params.get('id') || '').trim();
       const useGView = (params.get('mode') || '').toLowerCase() === 'gview';
       const maskEnabled = (params.get('mask') || '') !== '0';
+      const viewerType = (params.get('type') || '1').trim();
 
       if (!rawId) {
         showMsg('Brak parametru ?id=…',
@@ -119,7 +189,8 @@
       window.addEventListener('resize', updateScrollbarWidthVar);
 
       // ——— Włącz maskę (wąski pas po prawej, tylko górne 25% wysokości)
-      if (maskEnabled) {
+      // Eksperyment: w typie 1 chowamy maskę, włączamy tylko dla type=2
+      if (maskEnabled && viewerType === '2') {
         const maskRoot = $('maskRoot');
         maskRoot.hidden = false;
         maskRoot.querySelector('.rail').hidden = false;
@@ -149,25 +220,55 @@
       }
 
       // ——— URL viewer’a (gview jako fallback)
-      showMsg('Ładowanie dokumentu…');
+      // Dla type=2 pokazujemy overlay „Ładowanie…”.
+      // Dla type=1 i type=3 – bez overlay, aby UI Drive było w pełni widoczne.
+      if (viewerType === '2') {
+        showMsg('Ładowanie dokumentu…');
+      } else {
+        try { $('msg').hidden = true; } catch {}
+      }
 
       const src = useGView
         ? 'https://docs.google.com/gview?embedded=true&url=' +
           encodeURIComponent('https://drive.google.com/uc?export=download&id=' + fileId)
         : 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/preview';
+      const directPdf = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(fileId);
+      const gviewSrc = 'https://docs.google.com/gview?embedded=true&url=' + encodeURIComponent(directPdf);
 
-      const frame = $('pdfFrame');
-      frame.src = src;
-
-      // Po załadowaniu pokaż iframe i schowaj overlay
-      frame.addEventListener('load', () => {
-        frame.style.display = 'block';
-        $('msg').hidden = true;
-      });
+      // Wybór trybu viewera wg ?type=
+      if (viewerType === '2') {
+        // Wariant 2: natywny viewer PDF (z toolbar + pobieranie)
+        const emb = $('pdfEmbed');
+        emb.src = directPdf;
+        // Nie wszystkie przeglądarki emitują "load" dla <embed>
+        try { emb.addEventListener('load', () => { $('msg').hidden = true; }); } catch {}
+        // Awaryjnie schowaj overlay po krótkiej chwili
+        setTimeout(() => { $('msg').hidden = true; }, 900);
+        emb.style.display = 'block';
+      } else if (viewerType === '3') {
+        // Wariant 3: osadzony preview bez sandboxa (ikony działają, mogą otwierać nowe karty)
+        try { $('msg').hidden = true; } catch {}
+        const free = $('pdfFree');
+        free.src = src; // najczęściej /preview; można też erzec gview gdy ?mode=gview
+        free.style.display = 'block';
+      } else {
+        // Wariant 1 (domyślny): jak było – Google Drive preview lub gview
+        const frame = $('pdfFrame');
+        frame.src = src;
+        frame.addEventListener('load', () => {
+          frame.style.display = 'block';
+          $('msg').hidden = true;
+        });
+        // Klasy poprawiające dopasowanie i chowające pasek strony
+        document.body.classList.add('type1');
+        document.documentElement.classList.add('hide-scrollbar');
+        document.body.classList.add('hide-scrollbar');
+      }
 
       // Minimalna diagnostyka CSS
-      const cs = getComputedStyle(frame);
-      if (cs.pointerEvents === 'none') frame.style.pointerEvents = 'auto';
+      const targetEl = (viewerType === '2') ? $('pdfEmbed') : (viewerType === '3') ? $('pdfFree') : $('pdfFrame');
+      const cs = getComputedStyle(targetEl);
+      if (cs.pointerEvents === 'none') targetEl.style.pointerEvents = 'auto';
 
       // ——— Anty‑konsolka / utrudnienia (jak w Slides)
       try {
