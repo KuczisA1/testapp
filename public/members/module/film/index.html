@@ -32,6 +32,12 @@
         background: #000;
         cursor: default;
       }
+      @supports (height: 100svh) {
+        .player { height: 100svh; }
+      }
+      @supports (height: 100dvh) {
+        .player { height: 100dvh; }
+      }
 
       /* YouTube iframe fills container */
       #player {
@@ -47,6 +53,7 @@
         inset: 0;
         z-index: 1;
         background: transparent;
+        touch-action: manipulation; /* lepsze zachowanie na mobile, bez double-tap zoom */
       }
 
       /* Controls overlay */
@@ -62,6 +69,13 @@
         background: linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0));
         transition: opacity 160ms ease, transform 160ms ease;
         z-index: 2;
+      }
+
+      /* Safe-area padding (notches) */
+      .controls { 
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+        padding-left: calc(12px + env(safe-area-inset-left));
+        padding-right: calc(12px + env(safe-area-inset-right));
       }
 
       .controls.hidden {
@@ -160,7 +174,7 @@
       /* Top hint when no id provided */
       .hint {
         position: absolute;
-        top: 12px; left: 12px;
+        top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left));
         background: var(--ui-bg);
         padding: 8px 12px;
         border-radius: 6px;
@@ -172,6 +186,17 @@
       @media (max-width: 640px) {
         .volume input[type="range"] { width: 80px; }
         .time { min-width: 96px; font-size: 12px; }
+      }
+
+      /* Touch-friendly sizing */
+      @media (pointer: coarse) {
+        .btn { min-width: 44px; min-height: 44px; padding: 10px 14px; font-size: 16px; }
+        .icon { width: 20px; height: 20px; font-size: 20px; }
+        .time { font-size: 14px; }
+        .progress { height: 10px; }
+        .progress .thumb { width: 16px; height: 16px; }
+        /* Na urządzeniach mobilnych suwak głośności bywa nieskuteczny (iOS) – zostawiamy sam przycisk */
+        .volume input[type="range"] { display: none; }
       }
     </style>
   </head>
