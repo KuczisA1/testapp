@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChemDisk – PDF Viewer</title>
+
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/assets/logo-chemdisk.svg" />
+
+  <style>
+    :root{
+      /* ——— USTAWIENIA MASKI ——— */
+      --mask-gap: 0px;           /* odsunięcie całej maski od prawej krawędzi */
+      --rail-width: 96px;        /* docelowa szerokość pasa maski */
+      --rail-height: 25vh;       /* tylko 25% wysokości okna */
+      --scrollbar-w: 0px;        /* JS wpisze szerokość paska przewijania (jeśli jest) */
+    }
+
+    html, body { height: 100%; margin: 0; background: #0b0b0c; overflow: hidden; }
+
+    /* Iframe’y */
+    #pdfFrame, #pdfFree, #pdfEmbed, #pdfObject{
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      border: 0; display: none; z-index: 1; pointer-events: auto !important; background: #000;
+    }
+
+    /* Drobne poprawki dla trybu 1: pełny viewport i brak nakładki paska przewijania strony */
+    .type1 #pdfFrame{ width: 100vw; height: 100vh; }
+    .hide-scrollbar{ scrollbar-width: none; }
+    .hide-scrollbar::-webkit-scrollbar{ width:0; height:0; }
+
+    /* Pasek narzędzi – wyświetlany TYLKO dla komunikatów i linku awaryjnego */
+    #topBar{
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 48px; padding: 8px 12px; gap: 8px;
+      display: none; align-items: center; justify-content: flex-end;
+      z-index: 4; /* ponad maską (3) i viewerem (1) */
+      background: linear-gradient(180deg, rgba(10,10,12,.92), rgba(10,10,12,.65));
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+    }
+    #topBar .btn{
+      appearance: none; border: 0; border-radius: 8px;
+      padding: 8px 12px; font: 14px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color: #eaeaea; background: #1a1b1f; cursor: pointer; opacity: .95;
+    }
+    #topBar .btn:hover{ opacity: 1; background: #24262b; }
+
+    /* Opcjonalny overlay wiadomości (niewykorzystywany z loaderem) */
+    #msg{ position: fixed; inset: 0; z-index: 2; display: none; }
+
+    /* BLOKER ŁADOWANIA – używany dla type=2/3/4 (wyłączony dla type=1) */
+    #loader{
+      position: fixed; inset: 0; z-index: 2;
+      display: grid; place-items: center;
+      padding: 24px;
+      font: 16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color: #eaeaea; text-align: center; background:#000;
+    }
+    #loader[hidden]{ display:none }
+    #loader .hint{ opacity:.85; font-size:14px; margin-top:.6rem; }
+
+    /* Root maski nie przechwytuje eventów; tylko „hitbox” je łapie */
+    #maskRoot{ position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+    #maskRoot[hidden]{ display:none !important; }
+
+    /* Pionowy pas po prawej – tylko górne 25% okna */
+    #maskRoot .rail{
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 4px);
+      right: calc(var(--mask-gap) + var(--scrollbar-w));
+      /* szerokość przycięta o realną szerokość paska przewijania strony */
+      width: max(0px, calc(var(--rail-width) - var(--scrollbar-w)));
+      height: var(--rail-height);
+      pointer-events: auto;
+      background: transparent;          /* całkiem niewidoczna */
+      border-bottom-left-radius: 12px;  /* estetyczne zaokrąglenie */
+    }
+
+    @media (max-width: 640px){
+      :root{ --rail-width: 72px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Tryb 1: sandboxowany preview -->
+  <iframe id="pdfFrame"
+          title="Podgląd PDF (Google Drive – sandbox)"
+          allowfullscreen webkitallowfullscreen mozallowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-pointer-lock"></iframe>
+
+  <!-- Tryb 3: PREVIEW bez zabezpieczeń (bez sandbox) -->
+  <iframe id="pdfFree"
+          title="Podgląd PDF (bez sandbox – PREVIEW)"
+          allowfullscreen webkitallowfullscreen mozallowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"></iframe>
+
+  <!-- Fallback: natywny viewer PDF / embed -->
+  <embed id="pdfEmbed" type="application/pdf" />
+  <object id="pdfObject" type="application/pdf" data="" aria-label="Podgląd PDF"></object>
+
+  <!-- Pasek pomocniczy (link awaryjny, komunikaty) -->
+  <div id="topBar" aria-hidden="true">
+    <a id="dlBtn" class="btn" href="#" download>⬇ Pobierz</a>
+    <!-- opcjonalnie: <button id="resetBtn" class="btn" type="button">Reset</button> -->
+  </div>
+
+  <!-- Maska anty-popout – WŁĄCZONA tylko w type=1 (tryb chroniony) -->
+  <div id="maskRoot" hidden aria-hidden="true">
+    <div class="rail" hidden></div>
+  </div>
+
+  <!-- Stary komunikat (wyłączony) i loader (dla type 2/3/4) -->
+  <div id="msg" hidden></div>
+  <div id="loader" hidden><div><b>Ładowanie dokumentu…</b><div class="hint">To może potrwać chwilę przy większych plikach</div></div></div>
+
+  <!-- Niewidzialny link do wymuszenia pobierania (type=2) -->
+  <a id="autoDownloader" href="#" download style="position:fixed;left:-9999px;top:-9999px;opacity:0;pointer-events:none;" rel="noopener noreferrer"></a>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = 'chemdisk_pdf_viewer_v2';
+
+      const $ = (id) => document.getElementById(id);
+      const on = (el, ev, fn, opts) => { try { el.addEventListener(ev, fn, opts || {}); } catch {} };
+      const showLoader = (text, hint) => {
+        const box = $('loader');
+        if (!box) return;
+        box.innerHTML = '<div><b>' + (text || 'Ładowanie dokumentu…') + '</b>' +
+                        (hint ? '<div class="hint">' + hint + '</div>' : '<div class="hint">To może potrwać chwilę przy większych plikach</div>') +
+                        '</div>';
+        box.hidden = false;
+      };
+      const hideLoader = () => { try { $('loader').hidden = true; } catch {} };
+
+      // ——— Remember/restore helpers ———
+      function saveState(state){
+        try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state || {})); } catch {}
+      }
+      function loadState(){
+        try {
+          const raw = sessionStorage.getItem(STORAGE_KEY);
+          return raw ? JSON.parse(raw) : {};
+        } catch { return {}; }
+      }
+      function clearQueryNow(){
+        try { history.replaceState(null, '', '/'); } catch {}
+      }
+
+      // ——— Params: ?id= … ?mode=gview ?mask=0 ?type=1|2|3|4  (+ opcjonalnie ?keep=1 dla debug)
+      const urlParams = new URLSearchParams(location.search);
+      const keepQuery = (urlParams.get('keep') || '') === '1';
+
+      // 1) Najpierw spróbuj odczytać z URL
+      let rawId   = (urlParams.get('id')   || '').trim();
+      let modeArg = (urlParams.get('mode') || '').trim().toLowerCase();
+      let maskArg = (urlParams.get('mask') || '').trim();
+      let typeArg = (urlParams.get('type') || '').trim();
+
+      // 2) Jeśli coś jest w URL, zapisz i NATYCHMIAST WYCZYŚĆ pasek (żeby nie było widać ID)
+      if (rawId || modeArg || maskArg || typeArg) {
+        const state = {
+          id: rawId,
+          mode: modeArg || undefined,
+          mask: maskArg || undefined,
+          type: typeArg || undefined,
+        };
+        saveState(state);
+        if (!keepQuery) clearQueryNow();
+      }
+
+      // 3) Jeśli brakuje czegoś, dopełnij z pamięci
+      const mem = loadState();
+      rawId   = rawId   || mem.id   || '';
+      modeArg = modeArg || mem.mode || '';
+      maskArg = (maskArg !== '') ? maskArg : (mem.mask ?? '');
+      typeArg = typeArg || mem.type || '1';
+
+      const useGView = modeArg === 'gview';
+      const maskEnabledParam = maskArg !== '0';
+      const viewerType = typeArg;
+
+      // ⬇️ NOWE: dla type=1 natychmiast wyłącz loader (overlay niepotrzebny)
+      if (viewerType === '1') {
+        try { $('loader').hidden = true; } catch {}
+      }
+
+      if (!rawId) {
+        // Nie ma ID ani w URL ani w pamięci
+        showLoader('Brak parametru ID.', 'Dodaj ?id=FILE_ID lub pełny link do Google Drive. (Możesz też wkleić raz z ?keep=1 do debugowania.)');
+        return;
+      }
+
+      // ——— Pomiar szerokości paska przewijania
+      function updateScrollbarWidthVar(){
+        const sbw = window.innerWidth - document.documentElement.clientWidth;
+        document.documentElement.style.setProperty('--scrollbar-w', (sbw > 0 ? sbw : 0) + 'px');
+      }
+      updateScrollbarWidthVar();
+      window.addEventListener('resize', updateScrollbarWidthVar);
+
+      // ——— Wyciągnij fileId
+      function extractFileId(input){
+        const s = String(input).trim();
+        try {
+          const u = new URL(s);
+          // /file/d/{id}/...
+          let m = u.pathname.match(/\/file\/d\/([\w-]{10,})/i);
+          if (m && m[1]) return m[1];
+          // open?id=ID lub uc?id=ID
+          const idQ = u.searchParams.get('id');
+          if (idQ && /[\w-]{10,}/.test(idQ)) return idQ;
+        } catch {}
+        // 2) Samo fileId
+        return /^[\w-]{10,}$/.test(s) ? s : '';
+      }
+
+      const fileId = extractFileId(rawId);
+      if (!fileId) {
+        showLoader('Nie udało się rozpoznać ID pliku.', 'Podaj pełny link do Google Drive lub samo fileId.');
+        return;
+      }
+
+      // ——— Predefiniowane adresy
+      const directPdf = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(fileId);
+      const previewSrc = 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/preview';
+      const viewSrc    = 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/view';
+      const gviewSrc   = 'https://docs.google.com/gview?embedded=true&url=' + encodeURIComponent(directPdf);
+
+      // ——— Maska anty-popout: WŁĄCZONA tylko dla type=1 (tryb chroniony)
+      function enableMaskForType1(){
+        const maskRoot = $('maskRoot');
+        maskRoot.hidden = false;
+        maskRoot.querySelector('.rail').hidden = false;
+      }
+
+      // ——— Tryb 2: WYMUSZONE POBIERANIE
+      function runType2Download(){
+        showLoader('Przygotowywanie pobierania…', 'Jeśli pobieranie nie rozpocznie się automatycznie, użyj przycisku w prawym górnym rogu.');
+        const a = $('autoDownloader');
+        a.href = directPdf;         // Google Drive zwraca Content-Disposition: attachment
+        a.setAttribute('download', 'document.pdf');
+
+        // Pasek z linkiem awaryjnym
+        const topBar = $('topBar');
+        const dlBtn = $('dlBtn');
+        topBar.style.display = 'flex';
+        dlBtn.href = directPdf;
+        dlBtn.setAttribute('download', 'document.pdf');
+
+        // Spróbuj automatycznie zainicjować pobieranie
+        let autoClicked = false;
+        try { a.click(); autoClicked = true; } catch {}
+
+        // Fallback: nowe okno/karta
+        const fallbackOpen = () => {
+          try {
+            const w = window.open(directPdf, '_blank', 'noopener,noreferrer');
+            if (!w) throw new Error('Popup blocked');
+          } catch {}
+        };
+
+        setTimeout(() => { hideLoader(); }, 800);
+        setTimeout(() => { if (!autoClicked) fallbackOpen(); }, 2000);
+      }
+
+      // ——— Tryb 3: EMBED z linkiem „/preview” (BEZ zabezpieczeń)
+      function runType3PreviewNoProtect(){
+        showLoader();
+        const free = $('pdfFree');
+        free.src = useGView ? gviewSrc : previewSrc; // PREVIEW bez sandboxa i bez blokad
+        on(free, 'load', () => { free.style.display = 'block'; hideLoader(); }, { once:true });
+      }
+
+      // ——— Tryb 1: SANDBOX + PREVIEW (zabezpieczony, anty-konsolka, maska) — BEZ overlayu
+      function runType1Protected(){
+        const frame = $('pdfFrame');
+        const src = useGView ? gviewSrc : previewSrc;
+        frame.src = src;
+        on(frame, 'load', () => { frame.style.display = 'block'; }, { once:true });
+
+        // Układ i maska
+        document.body.classList.add('type1');
+        document.documentElement.classList.add('hide-scrollbar');
+        document.body.classList.add('hide-scrollbar');
+        if (maskEnabledParam) enableMaskForType1();
+
+        // Anty-konsolka / utrudnienia – TYLKO W TYPE=1
+        try {
+          document.addEventListener('contextmenu', e => e.preventDefault(), { passive:false });
+          document.addEventListener('keydown', e => {
+            const k = (e.key || '').toLowerCase();
+            if (e.keyCode === 123) return e.preventDefault(); // F12
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) return e.preventDefault();
+            if ((e.ctrlKey || e.metaKey) && ['u','s','p'].includes(k)) return e.preventDefault();
+          }, { capture:true });
+          const detect = () => {
+            const wDiff = window.outerWidth - window.innerWidth;
+            const hDiff = window.outerHeight - window.innerHeight;
+            return wDiff > 160 || hDiff > 160;
+          };
+          const killer = setInterval(() => {
+            if (detect()) {
+              try { document.body.innerHTML = ''; } catch {}
+              try { location.replace('/'); } catch {}
+              clearInterval(killer);
+            }
+          }, 800);
+          try { ['log','info','warn','error','debug'].forEach(m => (console[m] = () => {})); } catch {}
+        } catch {}
+      }
+
+      // ——— Tryb 4: SANDBOX + PREVIEW (zabezpieczony), ale bez hide-scrollbar i bez overlayu
+      function runType4ProtectedNoOverlay(){
+        showLoader('Ładowanie dokumentu…');
+        const frame = $('pdfFrame');
+        const src = useGView ? gviewSrc : previewSrc;
+        frame.src = src;
+        on(frame, 'load', () => { frame.style.display = 'block'; hideLoader(); }, { once:true });
+
+        // Anty-konsolka / skróty – jak w type=1
+        try {
+          document.addEventListener('contextmenu', e => e.preventDefault(), { passive:false });
+          document.addEventListener('keydown', e => {
+            const k = (e.key || '').toLowerCase();
+            if (e.keyCode === 123) return e.preventDefault(); // F12
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) return e.preventDefault();
+            if ((e.ctrlKey || e.metaKey) && ['u','s','p'].includes(k)) return e.preventDefault();
+          }, { capture:true });
+          // Maska opcjonalna przez param mask=1 (jeśli chcesz, możesz włączyć enableMaskForType1())
+        } catch {}
+      }
+
+      // ——— Start wg typu
+      if (viewerType === '2') {
+        runType2Download();
+      } else if (viewerType === '3') {
+        runType3PreviewNoProtect();
+      } else if (viewerType === '4') {
+        runType4ProtectedNoOverlay();
+      } else {
+        // domyślnie 1
+        runType1Protected();
+      }
+
+      // Minimalna diagnostyka CSS – upewnij się, że element docelowy przechwytuje eventy
+      const targetEl = (viewerType === '3') ? $('pdfFree') : (viewerType === '2') ? $('pdfEmbed') : $('pdfFrame');
+      try { const cs = getComputedStyle(targetEl); if (cs.pointerEvents === 'none') targetEl.style.pointerEvents = 'auto'; } catch {}
+
+      // Opcjonalnie: handler resetu pamięci (jeśli dodasz przycisk resetBtn)
+      // on($('resetBtn'), 'click', () => { sessionStorage.removeItem(STORAGE_KEY); location.href='/' });
+    })();
+  </script>
+</body>
+</html>
