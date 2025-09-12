@@ -79,16 +79,18 @@
     #topBar .btn:hover{ opacity: 1; background: #24262b; }
 
     /* Overlay z komunikatami (lekki) */
-    #msg{
+    #msg{ position: fixed; inset: 0; z-index: 2; display: none; }
+
+    /* PROSTY BLOKER ŁADOWANIA (pokazuj do czasu onload) */
+    #loader{
       position: fixed; inset: 0; z-index: 2;
       display: grid; place-items: center;
       padding: 24px;
       font: 16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      color: #eaeaea; text-align: center;
+      color: #eaeaea; text-align: center; background:#000;
     }
-    #msg b{ color:#fff; }
-    #msg[hidden]{ display:none !important; }
-    .hint{ opacity:.85; font-size:14px; margin-top:.6rem; }
+    #loader[hidden]{ display:none }
+    #loader .hint{ opacity:.85; font-size:14px; margin-top:.6rem; }
 
     /* Root maski nie przechwytuje eventów; tylko „hitbox” je łapie */
     #maskRoot{
@@ -117,18 +119,14 @@
 <body>
   <iframe id="pdfFrame"
           title="Podgląd PDF (Google Drive – sandbox)"
-          allowfullscreen
-          webkitallowfullscreen
-          mozallowfullscreen
+          allowfullscreen webkitallowfullscreen mozallowfullscreen
           referrerpolicy="strict-origin-when-cross-origin"
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-pointer-lock"></iframe>
 
   <!-- Iframe bez sandboxa dla trybu 3 (PREVIEW bez zabezpieczeń) -->
   <iframe id="pdfFree"
           title="Podgląd PDF (bez sandbox – PREVIEW)"
-          allowfullscreen
-          webkitallowfullscreen
-          mozallowfullscreen
+          allowfullscreen webkitallowfullscreen mozallowfullscreen
           referrerpolicy="strict-origin-when-cross-origin"></iframe>
 
   <!-- Fallback: natywny viewer PDF w przeglądarce (używany tylko, gdy trzeba coś wyświetlić) -->
@@ -148,7 +146,9 @@
     <div class="rail" hidden></div>
   </div>
 
+  <!-- Stary komunikat (wyłączony) i NOWY loader -->
   <div id="msg" hidden></div>
+  <div id="loader"><div><b>Ładowanie dokumentu…</b><div class="hint">To może potrwać chwilę przy większych plikach</div></div></div>
 
   <!-- Niewidzialny link do wymuszenia pobierania (type=2) -->
   <a id="autoDownloader" href="#" download style="position:fixed;left:-9999px;top:-9999px;opacity:0;pointer-events:none;" rel="noopener noreferrer"></a>
@@ -157,11 +157,14 @@
     (() => {
       const $ = (id) => document.getElementById(id);
       const on = (el, ev, fn, opts) => { try { el.addEventListener(ev, fn, opts || {}); } catch {} };
-      const showMsg = (text, hint) => {
-        const box = $('msg');
-        box.innerHTML = '<div><b>' + (text || 'Błąd') + '</b>' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
-        box.hidden = false;
+      const showLoader = (text, hint) => {
+        const box = $('loader');
+        if (box) {
+          box.innerHTML = '<div><b>' + (text || 'Ładowanie dokumentu…') + '</b>' + (hint ? '<div class="hint">' + hint + '</div>' : '<div class="hint">To może potrwać chwilę przy większych plikach</div>') + '</div>';
+          box.hidden = false;
+        }
       };
+      const hideLoader = () => { try { $('loader').hidden = true; } catch {} };
       const hideMsg = () => { try { $('msg').hidden = true; } catch {} };
 
       // —— Parametry: ?id=ID_LUB_LINK [wymagany], ?mode=gview (fallback), ?mask=0 (wyłącz maskę), ?type=1|2|3|4 (typ viewera)
@@ -172,7 +175,7 @@
       const viewerType = (params.get('type') || '1').trim();
 
       if (!rawId) {
-        showMsg('Brak parametru ?id=…', 'Użyj pełnego linku do pliku Google Drive lub samego fileId.');
+        showLoader('Brak parametru ?id=…', 'Użyj pełnego linku do pliku Google Drive lub samego fileId.');
         return;
       }
 
@@ -206,7 +209,7 @@
 
       const fileId = extractFileId(rawId);
       if (!fileId) {
-        showMsg('Nie udało się rozpoznać ID pliku.', 'Podaj pełny link do Google Drive lub samo fileId.');
+        showLoader('Nie udało się rozpoznać ID pliku.', 'Podaj pełny link do Google Drive lub samo fileId.');
         return;
       }
 
@@ -225,7 +228,7 @@
 
       // ——— Tryb 2: WYMUSZONE POBIERANIE
       function runType2Download(){
-        showMsg('Przygotowywanie pobierania…', 'Jeśli pobieranie nie rozpocznie się automatycznie, użyj przycisku w prawym górnym rogu.');
+        showLoader('Przygotowywanie pobierania…', 'Jeśli pobieranie nie rozpocznie się automatycznie, użyj przycisku w prawym górnym rogu.');
         const a = $('autoDownloader');
         a.href = directPdf;         // Google Drive zwraca Content-Disposition: attachment
         a.setAttribute('download', 'document.pdf');
@@ -249,26 +252,25 @@
           } catch {}
         };
 
-        setTimeout(() => { hideMsg(); hideQuerySoon(); }, 800);
+        setTimeout(() => { hideLoader(); hideQuerySoon(); }, 800);
         setTimeout(() => { if (!autoClicked) fallbackOpen(); }, 2000);
       }
 
       // ——— Tryb 3: EMBED z linkiem „/preview” (BEZ zabezpieczeń)
       function runType3PreviewNoProtect(){
-        hideMsg();
+        showLoader();
         const free = $('pdfFree');
         free.src = useGView ? gviewSrc : previewSrc; // PREVIEW bez sandboxa i bez blokad
-        free.style.display = 'block';
-        setTimeout(hideQuerySoon, 600);
+        on(free, 'load', () => { free.style.display = 'block'; hideLoader(); setTimeout(hideQuerySoon, 300); }, { once:true });
       }
 
       // ——— Tryb 1: SANDBOX + PREVIEW (zabezpieczony, anty‑konsolka, maska)
       function runType1Protected(){
-        showMsg('Ładowanie dokumentu…');
+        showLoader('Ładowanie dokumentu…');
         const frame = $('pdfFrame');
         const src = useGView ? gviewSrc : previewSrc;
         frame.src = src;
-        on(frame, 'load', () => { frame.style.display = 'block'; hideMsg(); setTimeout(hideQuerySoon, 600); });
+        on(frame, 'load', () => { frame.style.display = 'block'; hideLoader(); setTimeout(hideQuerySoon, 300); }, { once:true });
         document.body.classList.add('type1');
         document.documentElement.classList.add('hide-scrollbar');
         document.body.classList.add('hide-scrollbar');
@@ -301,12 +303,13 @@
 
       // ——— Tryb 4: SANDBOX + PREVIEW (zabezpieczony, ALE bez overlay i z widocznym scrollbar)
       function runType4ProtectedNoOverlay(){
-        // Brak overlay: nie pokazujemy showMsg() – od razu osadzamy
+        // Brak overlay: loader wystarczy – pokażemy dopiero po onload
+        showLoader('Ładowanie dokumentu…');
         const frame = $('pdfFrame');
         const src = useGView ? gviewSrc : previewSrc;
         frame.src = src;
         // Scrollbar DOZWOLONY – nie dodajemy klas hide-scrollbar
-        on(frame, 'load', () => { frame.style.display = 'block'; setTimeout(hideQuerySoon, 600); });
+        on(frame, 'load', () => { frame.style.display = 'block'; hideLoader(); setTimeout(hideQuerySoon, 300); }, { once:true });
 
         // Anty‑konsolka / skróty – jak w type=1
         try {
@@ -317,15 +320,13 @@
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) return e.preventDefault();
             if ((e.ctrlKey || e.metaKey) && ['u','s','p'].includes(k)) return e.preventDefault();
           }, { capture:true });
-          // Bez maski – prosileś o przewijanie i brak overlayu, więc maskę zostawiamy wyłączoną
-          // (można ją opcjonalnie włączyć parametrem mask=1 i dodać enableMaskForType1()).
+          // Maska opcjonalna przez mask=1
         } catch {}
       }
 
       // ——— Start wg typu
       if (viewerType === '2') {
         runType2Download();
-        showMsg('Łączenie z Google Drive…', 'Pobieranie powinno rozpocząć się automatycznie.');
       } else if (viewerType === '3') {
         runType3PreviewNoProtect();
       } else if (viewerType === '4') {
