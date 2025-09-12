@@ -2,24 +2,39 @@
 <html lang="pl">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>ChemDisk – Forms Embed</title>
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <link rel="stylesheet" href="./style.css" />
   <script defer src="./script.js"></script>
 </head>
 <body>
-  <main class="stage">
-    <iframe id="formFrame" title="Osadzony formularz" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="fullscreen"></iframe>
+  <main class="stage" aria-busy="true">
+    <iframe
+      id="formFrame"
+      title="Osadzony formularz"
+      loading="lazy"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allow="fullscreen">
+    </iframe>
 
-    <div id="error" class="error hidden" role="alert">
+    <!-- Loader (pokazywany do czasu udanego load) -->
+    <div id="loader" class="loader" aria-live="polite">
+      <div class="loader-card">
+        <b>Ładowanie formularza…</b>
+        <div class="hint">To może potrwać chwilę przy wolniejszym łączu</div>
+      </div>
+    </div>
+
+    <!-- Overlay błędu (startowo ukryty również atrybutem hidden) -->
+    <div id="error" class="error hidden" role="alert" aria-hidden="true" hidden>
       <div class="error-card">
         <h1>Nieprawidłowe lub brakujące <code>id</code></h1>
         <p>Użyj adresu w formacie:
           <br><code>.../index.html?id=FORM_ID</code>
           <br>albo wklej pełny link do Google Forms jako <code>id</code>.
         </p>
-        <p class="hint">Przykład: <code>?id=1AbCDefGhIJkLmNOP_qrSTuvWXyZ-12345</code></p>
+        <p class="hint">Przykład: <code>?id=1FAIpQLSdBldI4mPt-MhmDdnfyEJMnCec7DsZ3htmj7VjybBtV8KhDkQ</code></p>
       </div>
     </div>
   </main>

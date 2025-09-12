@@ -15,7 +15,10 @@ html, body {
   background: var(--bg);
   color: var(--fg);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Noto Sans", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  overflow: hidden; /* zapobiega przewijaniu i „odsłanianiu” warstw pod spodem */
 }
+
+body { min-height: 100dvh; }
 
 .stage {
   position: fixed;
@@ -23,15 +26,39 @@ html, body {
   display: grid;
 }
 
-#iframeFallback { display:none; }
-
+/* Iframe pod overlayami (loader/error) */
 #formFrame {
   width: 100vw;
   height: 100dvh;
   border: 0;
   display: block;
+  background: #000;
+  z-index: 1;
 }
 
+/* LOADER */
+.loader {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(2px);
+  z-index: 3;
+}
+.loader[hidden] { display: none !important; }
+.loader-card {
+  max-width: 560px;
+  width: min(92vw, 560px);
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  text-align: center;
+}
+.loader .hint { color: var(--muted); margin-top: 8px; font-size: .95rem; }
+
+/* BŁĄD (ponad loaderem) */
 .error {
   position: fixed;
   inset: 0;
@@ -39,10 +66,10 @@ html, body {
   place-items: center;
   padding: 24px;
   backdrop-filter: blur(4px);
+  z-index: 4;
 }
-
-.error.hidden { display: none; }
-
+.error.hidden { display: none !important; }
+.error[hidden] { display: none !important; }
 .error-card {
   max-width: 720px;
   width: min(92vw, 720px);
@@ -52,18 +79,8 @@ html, body {
   padding: 24px;
   text-align: center;
 }
-
-.error-card h1 {
-  margin: 0 0 8px 0;
-  font-size: 1.25rem;
-}
-
-.error-card .hint {
-  color: var(--muted);
-  margin-top: 8px;
-  font-size: .95rem;
-  word-break: break-word;
-}
+.error-card h1 { margin: 0 0 8px 0; font-size: 1.25rem; }
+.error-card .hint { color: var(--muted); margin-top: 8px; font-size: .95rem; word-break: break-word; }
 
 code {
   background: rgba(255,255,255,.06);
